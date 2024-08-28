@@ -31,11 +31,27 @@ class CameraFeedView(View):
 
 
 def get_sensor_data(request):
-    data = {
-        'battery': 75,  # Exemplo de valor
-        'temperature': 36.5,  # Exemplo de valor
-        'speed': 15.2,  # Exemplo de valor
-    }
+    rover = request.GET.get('rover', 'Rover-Argo-N-0')
+    
+    if rover == 'Rover-Argo-N-0':
+        data = {
+            'battery': 75,  # Exemplo de valor para Rover-Argo-N-0
+            'temperature': 36.5,  # Exemplo de valor para Rover-Argo-N-0
+            'speed': 15.2,  # Exemplo de valor para Rover-Argo-N-0
+        }
+    elif rover == 'Rover-Argo-N-1':
+        data = {
+            'battery': 65,  # Exemplo de valor para Rover-Argo-N-1
+            'temperature': 34.0,  # Exemplo de valor para Rover-Argo-N-1
+            'speed': 12.0,  # Exemplo de valor para Rover-Argo-N-1
+        }
+    else:
+        data = {
+            'battery': 0,
+            'temperature': 0,
+            'speed': 0,
+        }
+    
     return JsonResponse(data)
 
 @csrf_exempt
