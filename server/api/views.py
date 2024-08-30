@@ -7,13 +7,29 @@ from .serializers import ExampleModelSerializer
 import requests
 import json
 
+class GPSDataView(View):
+    def get(self, request, *args, **kwargs):
+        gps_url = "http://192.168.100.161:5000/gps/location_orientation"
+        
+        try:
+            response = requests.get(gps_url)
+
+            if response.status_code == 200:
+                gps_data = response.json()
+                return JsonResponse(gps_data)
+            else:
+                return JsonResponse({'status': 'failure', 'error': 'Failed to retrieve GPS data'}, status=response.status_code)
+
+        except requests.exceptions.RequestException as e:
+            return JsonResponse({'status': 'failure', 'error': str(e)}, status=500)
+        
 class ExampleModelViewSet(viewsets.ModelViewSet):
     queryset = ExampleModel.objects.all()
     serializer_class = ExampleModelSerializer
 
 class CameraFeedView(View):
     def get(self, request, *args, **kwargs):
-        camera_url = "http://192.168.100.117:4747/video"
+        camera_url = "http://192.168.100.122:4747/video"
 
         try:
             response = requests.get(camera_url, stream=True)

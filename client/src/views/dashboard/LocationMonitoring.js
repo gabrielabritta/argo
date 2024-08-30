@@ -1,38 +1,83 @@
-import React, { useEffect } from 'react'
-import { CCard, CCardBody, CCardHeader, CButton, CRow, CCol, CContainer } from '@coreui/react'
+import React, { useEffect, useState } from 'react'
+import { CCard, CCardBody, CCardHeader, CAlert, CCol, CRow } from '@coreui/react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { IconButton } from '@mui/material'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+
+// Importando o SVG diretamente
+import mapArrowLeft from './map-arrow-left.svg'
 
 const LocationMonitoring = () => {
+  const [map, setMap] = useState(null);
+  const [marker, setMarker] = useState(null);
+  const [gpsError, setGpsError] = useState(false);
+  const [position, setPosition] = useState({ latitude: null, longitude: null, compass: null });
+  const [controlsFocused, setControlsFocused] = useState(false); // Para controlar o foco nos controles
+
   useEffect(() => {
-    console.log('useEffect iniciado');
     const mapElement = document.getElementById('map');
-    if (mapElement) {
-      console.log('Elemento DOM "map" encontrado');
-      const map = L.map(mapElement).setView([-2.9187989436853723, -41.750797417424174], 13);
+    if (mapElement && !map) {
+      const initialMap = L.map(mapElement).setView([-2.9187989436853723, -41.750797417424174], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-      }).addTo(map);
-      console.log('Mapa carregado com sucesso');
-    } else {
-      console.error('Elemento DOM "map" não encontrado');
+      }).addTo(initialMap);
+      setMap(initialMap);
     }
-  }, []);
+  }, [map]);
 
-  const getCookie = (name) => {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
+  useEffect(() => {
+    if (map) {
+      const fetchGPSData = async () => {
+        try {
+          const response = await fetch('http://localhost:8000/api/gps-data/');
+          const data = await response.json();
+
+          if (data.status === 1) {
+            const { latitude, longitude, compass } = data;
+            setPosition({ latitude, longitude, compass });
+            setGpsError(false);
+          } else {
+            console.error('GPS data is not available');
+            setGpsError(true);
+          }
+        } catch (error) {
+          console.error('Error fetching GPS data:', error);
+          setGpsError(true);
+        }
+      };
+
+      fetchGPSData();
+      const intervalId = setInterval(fetchGPSData, 5000);
+      return () => clearInterval(intervalId);
+    }
+  }, [map]);
+
+  useEffect(() => {
+    if (map && position.latitude !== null && position.longitude !== null) {
+      const gpsIcon = L.divIcon({
+        className: 'custom-marker',
+        html: `<img src="${mapArrowLeft}" style="transform: rotate(${position.compass + 90}deg);" alt="GPS Icon" />`,
+        iconSize: [30, 30], // Ajuste o tamanho conforme necessário
+      });
+
+      if (!marker) {
+        const initialMarker = L.marker([position.latitude, position.longitude], {
+          icon: gpsIcon,
+        }).addTo(map);
+        setMarker(initialMarker);
+      } else {
+        marker.setLatLng([position.latitude, position.longitude]);
+        const iconElement = marker.getElement().querySelector('img');
+        if (iconElement) {
+          iconElement.style.transform = `rotate(${position.compass + 90}deg)`;
         }
       }
     }
-    return cookieValue;
-  };
+  }, [map, marker, position]);
 
   const handleButtonClick = (direction) => {
     const button = document.getElementById(`btn-${direction}`);
@@ -59,42 +104,143 @@ const LocationMonitoring = () => {
     });
   };
 
+  const getCookie = (name) => {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; cookies.length > i; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  };
+
+  // Evento de teclado para capturar as setas quando o bloco estiver focado
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (controlsFocused) {
+        switch (event.key) {
+          case 'ArrowUp':
+            handleButtonClick('up');
+            break;
+          case 'ArrowDown':
+            handleButtonClick('down');
+            break;
+          case 'ArrowLeft':
+            handleButtonClick('left');
+            break;
+          case 'ArrowRight':
+            handleButtonClick('right');
+            break;
+          default:
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [controlsFocused]);
+
   return (
-    <CCard>
-      <CCardHeader>
-        Monitoramento de Localização
-      </CCardHeader>
-      <CCardBody>
-        <div id="map" style={{ height: '500px' }}></div>
-        <CContainer className="mt-4 d-flex justify-content-center">
-          <div className="d-flex flex-column align-items-center">
-            <CButton id="btn-up" color="primary" onClick={() => handleButtonClick('up')}>&uarr;</CButton>
-            <div className="d-flex justify-content-center mt-2" style={{ width: '100px', margin: '10px 0' }}>
-              <CButton id="btn-left" color="primary" className="mr-3" onClick={() => handleButtonClick('left')}>&larr;</CButton>
-              <CButton id="btn-right" color="primary" className="ml-3" onClick={() => handleButtonClick('right')}>&rarr;</CButton>
+    <CRow>
+      <CCol md={8}>
+        <CCard>
+          <CCardHeader>
+            Monitoramento de Localização
+          </CCardHeader>
+          <CCardBody>
+            {gpsError && (
+              <CAlert color="danger">
+                Falha ao obter dados de GPS. Tentando reconectar...
+              </CAlert>
+            )}
+            <div id="map" style={{ height: '500px' }}></div>
+          </CCardBody>
+        </CCard>
+      </CCol>
+      <CCol md={4}>
+        <CCard>
+          <CCardHeader>
+            Controles
+          </CCardHeader>
+          <CCardBody>
+            <div
+              className="control-container"
+              tabIndex="0"
+              onFocus={() => setControlsFocused(true)}
+              onBlur={() => setControlsFocused(false)}
+            >
+              <div className="control-row control-up">
+                <IconButton id="btn-up" color="primary" onClick={() => handleButtonClick('up')}>
+                  <ArrowUpwardIcon fontSize="large" />
+                </IconButton>
+              </div>
+              <div className="control-row control-middle">
+                <IconButton id="btn-left" color="primary" onClick={() => handleButtonClick('left')}>
+                  <ArrowBackIcon fontSize="large" />
+                </IconButton>
+                <IconButton id="btn-right" color="primary" onClick={() => handleButtonClick('right')}>
+                  <ArrowForwardIcon fontSize="large" />
+                </IconButton>
+              </div>
+              <div className="control-row control-down">
+                <IconButton id="btn-down" color="primary" onClick={() => handleButtonClick('down')}>
+                  <ArrowDownwardIcon fontSize="large" />
+                </IconButton>
+              </div>
             </div>
-            <CButton id="btn-down" color="primary" className="mt-2" onClick={() => handleButtonClick('down')}>&darr;</CButton>
-          </div>
-        </CContainer>
-        <style>
-          {`
-            .pressed {
-              transform: scale(0.9);
-              transition: transform 0.1s;
-            }
-            .d-flex .justify-content-center {
-              justify-content: space-between;
-            }
-            .mr-3 {
-              margin-right: 10px;
-            }
-            .ml-3 {
-              margin-left: 10px;
-            }
-          `}
-        </style>
-      </CCardBody>
-    </CCard>
+          </CCardBody>
+        </CCard>
+      </CCol>
+      <style>
+        {`
+          .control-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-radius: 5px;
+            width: 100%;
+          }
+          .control-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 10px;
+          }
+          .control-up, .control-down {
+            width: 100%;
+            justify-content: center;
+          }
+          .control-middle {
+            width: 100%;
+            justify-content: space-between;
+            padding: 0 20%;
+          }
+          .pressed {
+            transform: scale(0.9);
+            transition: transform 0.1s;
+          }
+          .custom-marker img {
+            width: 100%;
+            height: 100%;
+          }
+          .MuiIconButton-root {
+            transition: transform 0.1s ease-in-out;
+          }
+          .MuiIconButton-root:active {
+            transform: scale(0.9);
+          }
+        `}
+      </style>
+    </CRow>
   )
 }
 

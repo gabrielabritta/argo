@@ -29,7 +29,7 @@ const CameraMonitoring = () => {
   }, [])
 
   return (
-    <CCard>
+    <CCard style={{ maxWidth: '960px', margin: '0 auto' }}>
       <CCardHeader>Monitoramento de Câmera</CCardHeader>
       <CCardBody style={{ position: 'relative', padding: 0 }}>
         {imageLoaded ? (
@@ -43,7 +43,7 @@ const CameraMonitoring = () => {
             style={{
               width: '100%',
               height: '0',
-              paddingTop: '56.25%',
+              paddingTop: '56.25%', // Aspect ratio for 16:9
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
