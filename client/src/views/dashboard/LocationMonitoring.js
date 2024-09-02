@@ -10,6 +10,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 
 // Importando o SVG diretamente
 import mapArrowLeft from './map-arrow-left.svg'
+import argoSvg from './argo1.svg' // Importando o SVG
 
 const LocationMonitoring = () => {
   const [map, setMap] = useState(null);
@@ -21,11 +22,30 @@ const LocationMonitoring = () => {
   useEffect(() => {
     const mapElement = document.getElementById('map');
     if (mapElement && !map) {
-      const initialMap = L.map(mapElement).setView([-2.9187989436853723, -41.750797417424174], 13);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+      const initialMap = L.map(mapElement).setView([-3.1232575653870027, -41.765995717278315], 16);
+      const baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 25,
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ',
       }).addTo(initialMap);
       setMap(initialMap);
+
+      // Monitora mudanças de zoom
+      initialMap.on('zoomend', () => {
+        const zoomLevel = initialMap.getZoom();
+        if (zoomLevel > 17) {
+          // Adiciona a camada SVG
+          if (!initialMap.hasLayer(svgOverlay)) {
+            baseLayer.remove();
+            svgOverlay.addTo(initialMap);
+          }
+        } else {
+          // Remove a camada SVG e volta ao tile normal
+          if (initialMap.hasLayer(svgOverlay)) {
+            svgOverlay.remove();
+            baseLayer.addTo(initialMap);
+          }
+        }
+      });
     }
   }, [map]);
 
@@ -148,6 +168,10 @@ const LocationMonitoring = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [controlsFocused]);
+
+  // Define o SVG Overlay
+  const svgBounds = [[-3.126, -41.770], [-3.121, -41.760]]; // Ajuste conforme necessário
+  const svgOverlay = L.imageOverlay(argoSvg, svgBounds);
 
   return (
     <CRow>
