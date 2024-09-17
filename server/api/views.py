@@ -6,6 +6,7 @@ from .models import ExampleModel
 from .serializers import ExampleModelSerializer
 import requests
 import json
+import base64
 
 class GPSDataView(View):
     def get(self, request, *args, **kwargs):
@@ -22,14 +23,53 @@ class GPSDataView(View):
 
         except requests.exceptions.RequestException as e:
             return JsonResponse({'status': 'failure', 'error': str(e)}, status=500)
+
+class ImageView(View):
+    def get(self, request, *args, **kwargs):
+        image_url = "http://192.168.100.57:8080/imagem"
+        pos_url = "http://192.168.100.57:8080/pos"
         
+        try:
+            # Fazendo a solicitação para coletar a imagem
+            image_response = requests.get(image_url, stream=True)
+            
+            # Fazendo a solicitação para coletar os dados de identificação de objetos
+            pos_response = requests.get(pos_url)
+
+            if image_response.status_code == 200 and pos_response.status_code == 200:
+                # Codificar a imagem em base64
+                image_base64 = base64.b64encode(image_response.raw.read()).decode('utf-8')
+                
+                # Obtendo o JSON com as coordenadas e rótulos
+                pos_data = pos_response.json()
+                print(pos_data)
+
+                # Retornar a imagem e os dados em um JSON
+                return JsonResponse({
+                    'image': image_base64,
+                    'objects': pos_data
+                })
+            else:
+                return JsonResponse({'error': f"Error retrieving data, status code: {image_response.status_code} or {pos_response.status_code}"}, status=500)
+
+        except requests.exceptions.RequestException as e:
+            return JsonResponse({'error': f"Error connecting to the image or object source: {str(e)}"}, status=500)
+
+@csrf_exempt
+def box_click_view(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        print(f"Box clicada: {data}")
+        return JsonResponse({'status': 'success', 'box': data})
+    return JsonResponse({'status': 'failure'}, status=400)
+
 class ExampleModelViewSet(viewsets.ModelViewSet):
     queryset = ExampleModel.objects.all()
     serializer_class = ExampleModelSerializer
 
 class CameraFeedView(View):
     def get(self, request, *args, **kwargs):
-        camera_url = "http://192.168.100.122:4747/video"
+        camera_url = "http://192.168.100.57:4747/video"
 
         try:
             response = requests.get(camera_url, stream=True)
