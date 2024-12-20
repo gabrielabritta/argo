@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  client:
+    build: 
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_MQTT_URL=ws://localhost:9001
+    depends_on:
+      - server
+      - mqtt
+
+  server:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app
+    environment:
+      - MQTT_HOST=mqtt
+      - MQTT_PORT=1883
+    depends_on:
+      - mqtt
+      - ros
+    command: python manage.py runserver 0.0.0.0:8000
+
+  mqtt:
+    build: 
+      context: ./mqtt
+      dockerfile: Dockerfile
+    ports:
+      - "1883:1883"  # MQTT
+      - "9001:9001"  # WebSockets
+    volumes:
+      - mqtt-data:/mosquitto/data
+      - mqtt-log:/mosquitto/log
+
+  ros:
+    build:
+      context: .
+      dockerfile: ./ros/Dockerfile
+    environment:
+      - ROS_MASTER_URI=http://localhost:11311
+      - ROS_HOSTNAME=ros
+    ports:
+      - "11311:11311"  # ROS Master
+      - "9090:9090"    # ROS Bridge WebSocket
+    volumes:
+      - ./ros:/catkin_ws/src/ros_app
+    depends_on:
+      - mqtt
+
+volumes:
+  mqtt-data:
+  mqtt-log:

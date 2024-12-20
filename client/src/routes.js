@@ -3,6 +3,7 @@ import React from 'react'
 const Dashboard = React.lazy(() => import('./views/dashboard/Dashboard'))
 const Camera = React.lazy(() => import('./views/dashboard/CameraMonitoring'))
 const Localizacao = React.lazy(() => import('./views/dashboard/LocationMonitoring'))
+const Mapeamento = React.lazy(() => import('./views/dashboard/Mapping'))
 const Colors = React.lazy(() => import('./views/theme/colors/Colors'))
 const Typography = React.lazy(() => import('./views/theme/typography/Typography'))
 
@@ -58,6 +59,7 @@ const routes = [
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
   { path: '/controle/camera', name: 'Camera', element: Camera },
   { path: '/controle/localizacao', name: 'Localização', element: Localizacao },
+  { path: '/controle/mapeamento', name: 'Mapeamento', element: Mapeamento },
   { path: '/theme', name: 'Theme', element: Colors, exact: true },
   { path: '/theme/colors', name: 'Colors', element: Colors },
   { path: '/theme/typography', name: 'Typography', element: Typography },
