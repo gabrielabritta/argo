@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   client:
-    build: 
+    build:
       context: ./client
       dockerfile: Dockerfile
     ports:
@@ -18,7 +18,7 @@ services:
       - mqtt
 
   server:
-    build: 
+    build:
       context: ./server
       dockerfile: Dockerfile
     ports:
@@ -28,13 +28,26 @@ services:
     environment:
       - MQTT_HOST=mqtt
       - MQTT_PORT=1883
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=roverdb
+      - POSTGRES_USER=roveruser
+      - POSTGRES_PASSWORD=roverpass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DJANGO_SETTINGS_MODULE=myproject.settings
     depends_on:
       - mqtt
-      - ros
-    command: python manage.py runserver 0.0.0.0:8000
+      - db
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   mqtt:
-    build: 
+    build:
       context: ./mqtt
       dockerfile: Dockerfile
     ports:
@@ -44,21 +57,48 @@ services:
       - mqtt-data:/mosquitto/data
       - mqtt-log:/mosquitto/log
 
-  ros:
-    build:
-      context: .
-      dockerfile: ./ros/Dockerfile
-    environment:
-      - ROS_MASTER_URI=http://localhost:11311
-      - ROS_HOSTNAME=ros
+  db:
+    image: postgres:13
     ports:
-      - "11311:11311"  # ROS Master
-      - "9090:9090"    # ROS Bridge WebSocket
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=roverdb
+      - POSTGRES_USER=roveruser
+      - POSTGRES_PASSWORD=roverpass
     volumes:
-      - ./ros:/catkin_ws/src/ros_app
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
     depends_on:
-      - mqtt
+      - redis
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin@admin.com"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
 
 volumes:
   mqtt-data:
   mqtt-log:
+  postgres-data:
+  redis-data:
+  pgadmin-data:

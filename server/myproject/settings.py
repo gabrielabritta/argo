@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-khj0q$f)c2s6vrd!9*519r4a6tsjemmjodv9^pyvitl1d-+uu2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -40,7 +41,10 @@ INSTALLED_APPS = [
     'rest_framework',
     'api',
     'corsheaders',
+    'channels',
 ]
+
+ASGI_APPLICATION = 'myproject.asgi.application'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -78,13 +82,37 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.environ.get('REDIS_HOST', 'redis'), 6379)],
+            "capacity": 1500,
+            "expiry": 10,
+        },
+    },
+}
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'roverdb'),
+        'USER': os.environ.get('POSTGRES_USER', 'roveruser'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'roverpass'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': '5432',
     }
 }
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{os.environ.get('REDIS_HOST', 'localhost')}:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -116,6 +144,12 @@ USE_I18N = True
 
 USE_TZ = True
 
+MQTT_HOST = os.environ.get('MQTT_HOST', 'mqtt')
+MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
+
+# Redis Settings
+REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
@@ -140,6 +174,14 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  
-    "http://192.168.100.117", 
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://192.168.100.117",
+]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]

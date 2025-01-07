@@ -1,7 +1,12 @@
 from rest_framework import serializers
-from .models import ExampleModel
+from .models import Rover, Substation
 
-class ExampleModelSerializer(serializers.ModelSerializer):
+class RoverSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ExampleModel
+        model = Rover
+        fields = '__all__'
+
+class SubstationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Substation
         fields = '__all__'
