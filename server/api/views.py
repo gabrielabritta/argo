@@ -24,15 +24,81 @@ class RoverViewSet(viewsets.ModelViewSet):
     queryset = Rover.objects.all()
     serializer_class = RoverSerializer
 
-    def perform_create(self, serializer):
-        rover = serializer.save()
-        # Notificar via WebSocket sobre novo rover
-        notify_new_rover(rover)
+    def create(self, request, *args, **kwargs):
+        """
+        Cria um novo rover associado a uma subestação.
+        Exemplo de payload:
+        {
+            "name": "Rover-Argo-N-0",
+            "identifier": "ROVER001",
+            "model": "ArgoModel-2024",
+            "substation": "SUB001"  # Identifier da subestação
+        }
+        """
+        # Pegar o identifier da subestação do request
+        substation_identifier = request.data.get('substation')
+        if not substation_identifier:
+            return Response(
+                {'error': 'Substation identifier is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def perform_destroy(self, instance):
-        # Limpar dados do Redis antes de deletar
-        clean_rover_redis_data(instance)
-        instance.delete()
+        try:
+            # Buscar a subestação pelo identifier
+            substation = Substation.objects.get(identifier=substation_identifier)
+
+            # Criar uma cópia dos dados do request
+            rover_data = request.data.copy()
+            # Substituir o identifier da subestação pelo ID do objeto
+            rover_data['substation'] = substation.id
+
+            # Criar o serializer com os dados modificados
+            serializer = self.get_serializer(data=rover_data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+
+            headers = self.get_success_headers(serializer.data)
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED,
+                headers=headers
+            )
+
+        except Substation.DoesNotExist:
+            return Response(
+                {'error': 'Substation not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=['post'])
+    def assign_substation(self, request, pk=None):
+        """
+        Endpoint para reassociar um rover a uma nova subestação.
+        POST /api/rovers/{rover_id}/assign_substation/
+        Payload: {"substation": "SUB001"}
+        """
+        rover = self.get_object()
+        substation_identifier = request.data.get('substation')
+
+        if not substation_identifier:
+            return Response(
+                {'error': 'Substation identifier is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            substation = Substation.objects.get(identifier=substation_identifier)
+            rover.substation = substation
+            rover.save()
+
+            serializer = self.get_serializer(rover)
+            return Response(serializer.data)
+
+        except Substation.DoesNotExist:
+            return Response(
+                {'error': 'Substation not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class SubstationViewSet(viewsets.ModelViewSet):
     queryset = Substation.objects.all()
@@ -84,7 +150,7 @@ def get_sensor_data(request):
     Endpoint para obter dados dos sensores do rover.
     """
     rover_id = request.GET.get('rover', 'Rover-Argo-N-0')
-    substation_id = 'SUB001'
+    substation_id = request.GET.get('substation')
     logger.info(f"Buscando dados para rover {rover_id} da substation {substation_id}")
 
     try:
@@ -227,7 +293,7 @@ def direction_view(request):
         try:
             # Publicar comando no tópico MQTT do rover
             rover_id = request.GET.get('rover', 'Rover-Argo-N-0')
-            substation_id = 'SUB001'  # Por enquanto hardcoded
+            substation_id = request.GET.get('substation')
 
             mqtt_client = mqtt.Client()
             mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
@@ -267,7 +333,7 @@ def select_mission_view(request):
        try:
            # Pegar identificadores do rover e subestação
            rover_id = request.GET.get('rover', 'Rover-Argo-N-0')
-           substation_id = 'SUB001'  # Hardcoded por enquanto
+           substation_id = request.GET.get('substation')
 
            # Conectar ao MQTT
            mqtt_client = mqtt.Client()

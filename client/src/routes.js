@@ -6,6 +6,9 @@ const Localizacao = React.lazy(() => import('./views/dashboard/LocationMonitorin
 const Mapeamento = React.lazy(() => import('./views/dashboard/Mapping'))
 const Colors = React.lazy(() => import('./views/theme/colors/Colors'))
 const Typography = React.lazy(() => import('./views/theme/typography/Typography'))
+const SelectionView = React.lazy(() => import('./views/selection/SelectionView'))
+const SubstationInspection = React.lazy(() => import('./views/inspection/SubstationInspection'))
+const RoverInspection = React.lazy(() => import('./views/inspection/RoverInspection'))
 
 // Base
 const Accordion = React.lazy(() => import('./views/base/accordion/Accordion'))
@@ -57,6 +60,13 @@ const Widgets = React.lazy(() => import('./views/widgets/Widgets'))
 const routes = [
   { path: '/', exact: true, name: 'Home' },
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
+  { path: '/selection', name: 'Seleção', element: SelectionView },
+  {
+    path: '/inspect/substation/:substationId',
+    name: 'Inspeção de Subestação',
+    element: SubstationInspection,
+  },
+  { path: '/inspect/rover/:roverId', name: 'Inspeção de Rover', element: RoverInspection },
   { path: '/controle/camera', name: 'Camera', element: Camera },
   { path: '/controle/localizacao', name: 'Localização', element: Localizacao },
   { path: '/controle/mapeamento', name: 'Mapeamento', element: Mapeamento },

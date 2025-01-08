@@ -39,8 +39,8 @@ class RoverTelemetry(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
     battery_level = models.FloatField()
     temperature = models.FloatField()
-    latitude = models.FloatField()
-    longitude = models.FloatField()
+    latitude = models.FloatField(null=True)
+    longitude = models.FloatField(null=True)
     speed = models.FloatField(null=True)
     status = models.CharField(max_length=50)
 
@@ -48,3 +48,4 @@ class RoverTelemetry(models.Model):
         indexes = [
             models.Index(fields=['rover', 'timestamp'])
         ]
+        get_latest_by = 'timestamp'
