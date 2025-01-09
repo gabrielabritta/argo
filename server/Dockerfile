@@ -18,6 +18,8 @@ COPY . .
 # Create management commands directory
 RUN mkdir -p api/management/commands
 
+COPY api/management/commands/setup_initial_data.py api/management/commands/setup_initial_data.py
+
 # Create setup_initial_data.py
 RUN echo 'from django.core.management.base import BaseCommand\n\
 from api.models import Rover, Substation\n\

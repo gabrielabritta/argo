@@ -18,8 +18,8 @@ import {
 } from '@coreui/react'
 
 // Importar os componentes existentes
-import CameraMonitoring from '../camera/CameraMonitoring'
-import LocationMonitoring from '../location/LocationMonitoring'
+import CameraMonitoring from '../dashboard/CameraMonitoring'
+import LocationMonitoring from '../dashboard/LocationMonitoring'
 
 const RoverInspection = () => {
   const { roverId } = useParams()

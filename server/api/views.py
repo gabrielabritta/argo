@@ -1,7 +1,7 @@
 from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.views import View
 from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from django.core.cache import cache
 import redis
