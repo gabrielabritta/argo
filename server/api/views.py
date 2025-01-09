@@ -1,20 +1,24 @@
+import json
+import logging
+from datetime import datetime
+import paho.mqtt.client as mqtt
+from django.conf import settings
+from django.core.cache import cache
+from django.db import connections
+from django.db.utils import OperationalError
 from django.http import JsonResponse, HttpResponse, StreamingHttpResponse
 from django.views import View
-from rest_framework import viewsets
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
-from django.core.cache import cache
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from redis import Redis
 import redis
 import requests
-import json
 from .models import Rover, Substation, RoverTelemetry
 from .serializers import RoverSerializer, SubstationSerializer
-from django.views.decorators.csrf import csrf_exempt
-from django.db.utils import OperationalError
-from django.conf import settings
-from django.db import connections
-from redis import Redis
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +153,17 @@ def get_sensor_data(request):
     """
     Endpoint para obter dados dos sensores do rover.
     """
-    rover_id = request.GET.get('rover', 'Rover-Argo-N-0')
-    substation_id = request.GET.get('substation')
-    logger.info(f"Buscando dados para rover {rover_id} da substation {substation_id}")
+    rover_id = request.GET.get('rover')
+    if not rover_id:
+        return Response({'error': 'Rover ID is required'}, status=400)
 
     try:
+        # Primeiro, buscar o rover para obter a subestação
+        rover = Rover.objects.select_related('substation').get(identifier=rover_id)
+        substation_id = rover.substation.identifier
+
+        logger.info(f"Buscando dados para rover {rover_id} da substation {substation_id}")
+
         # Conectar ao Redis
         redis_client = redis.Redis(
             host=settings.REDIS_HOST,
@@ -167,26 +177,21 @@ def get_sensor_data(request):
         logger.info(f"Buscando dados do Redis com chave: {redis_key}")
 
         data = redis_client.get(redis_key)
-        logger.info(f"Dados brutos do Redis: {data}")
-
         if data:
             try:
                 telemetry = json.loads(data)
-                logger.info(f"Dados decodificados do Redis: {telemetry}")
                 response_data = {
                     'battery': float(telemetry.get('battery', 0)),
                     'temperature': float(telemetry.get('temperature', 0)),
-                    'speed': float(telemetry.get('speed', 0))
+                    'speed': float(telemetry.get('speed', 0)),
+                    'substation': substation_id
                 }
-                logger.info(f"Enviando resposta: {response_data}")
                 return Response(response_data)
             except json.JSONDecodeError as e:
                 logger.error(f"Erro ao decodificar dados do Redis: {e}")
 
-        # Se não encontrar no Redis, buscar do banco de dados
+        # Se não encontrar no Redis, buscar do banco
         try:
-            logger.info("Buscando dados do banco de dados")
-            rover = Rover.objects.get(identifier=rover_id)
             last_telemetry = RoverTelemetry.objects.filter(
                 rover=rover
             ).latest('timestamp')
@@ -194,19 +199,21 @@ def get_sensor_data(request):
             response_data = {
                 'battery': float(last_telemetry.battery_level),
                 'temperature': float(last_telemetry.temperature),
-                'speed': float(last_telemetry.speed or 0)
+                'speed': float(last_telemetry.speed or 0),
+                'substation': substation_id
             }
-            logger.info(f"Dados encontrados no banco: {response_data}")
             return Response(response_data)
 
-        except (Rover.DoesNotExist, RoverTelemetry.DoesNotExist):
-            logger.warning(f"Nenhum dado encontrado para o rover {rover_id}")
+        except RoverTelemetry.DoesNotExist:
             return Response({
                 'battery': 0,
                 'temperature': 0,
-                'speed': 0
+                'speed': 0,
+                'substation': substation_id
             })
 
+    except Rover.DoesNotExist:
+        return Response({'error': 'Rover not found'}, status=404)
     except Exception as e:
         logger.error(f"Erro ao buscar dados dos sensores: {str(e)}", exc_info=True)
         return Response({
@@ -370,34 +377,38 @@ def select_mission_view(request):
 
 class ImageView(View):
     def get(self, request, *args, **kwargs):
-        image_url = "http://192.168.100.57:8080/imagem"
-        pos_url = "http://192.168.100.57:8080/pos"
+        rover_id = request.GET.get('rover')
+        substation_id = request.GET.get('substation')
+
+        if not rover_id or not substation_id:
+            return JsonResponse({'error': 'Rover and substation IDs are required'}, status=400)
 
         try:
-            # Fazendo a solicitação para coletar a imagem
-            image_response = requests.get(image_url, stream=True)
+            # Tentar pegar do Redis primeiro (cache temporário)
+            redis_client = redis.Redis(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                db=1,
+                decode_responses=True
+            )
 
-            # Fazendo a solicitação para coletar os dados de identificação de objetos
-            pos_response = requests.get(pos_url)
+            # Usar chaves separadas para imagem e boxes
+            image_key = f'image:sub{substation_id}:rover{rover_id}'
+            boxes_key = f'boxes:sub{substation_id}:rover{rover_id}'
 
-            if image_response.status_code == 200 and pos_response.status_code == 200:
-                # Codificar a imagem em base64
-                image_base64 = base64.b64encode(image_response.raw.read()).decode('utf-8')
+            image_data = redis_client.get(image_key)
+            boxes_data = redis_client.get(boxes_key)
 
-                # Obtendo o JSON com as coordenadas e rótulos
-                pos_data = pos_response.json()
-                print(pos_data)
-
-                # Retornar a imagem e os dados em um JSON
+            if image_data and boxes_data:
                 return JsonResponse({
-                    'image': image_base64,
-                    'objects': pos_data
+                    'image': image_data,
+                    'objects': json.loads(boxes_data)
                 })
             else:
-                return JsonResponse({'error': f"Error retrieving data, status code: {image_response.status_code} or {pos_response.status_code}"}, status=500)
+                return JsonResponse({'error': 'No recent image data available'}, status=404)
 
-        except requests.exceptions.RequestException as e:
-            return JsonResponse({'error': f"Error connecting to the image or object source: {str(e)}"}, status=500)
+        except Exception as e:
+            return JsonResponse({'error': f"Error retrieving data: {str(e)}"}, status=500)
 
 @csrf_exempt
 def box_click_view(request):
@@ -435,3 +446,41 @@ def health_check(request):
     }
 
     return Response(status)
+
+@api_view(['POST'])
+def request_image_view(request):
+    """
+    Endpoint para solicitar que o rover publique uma imagem no tópico MQTT.
+    """
+    try:
+        body = json.loads(request.body)
+        rover_id = body.get('rover')
+        substation_id = body.get('substation')
+
+        if not rover_id or not substation_id:
+            return Response(
+                {"error": "Informe 'rover' e 'substation' no corpo da requisição"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Montar a mensagem de comando
+        command_data = {
+            "command": "capture_image",
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Conectar ao broker MQTT
+        mqtt_client = mqtt.Client()
+        mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+
+        # Publicar no tópico de comandos do rover
+        command_topic = f"substations/{substation_id}/rovers/{rover_id}/commands"
+        mqtt_client.publish(command_topic, json.dumps(command_data))
+        mqtt_client.disconnect()
+
+        logger.info(f"[request_image_view] Solicitado capture_image para rover {rover_id} na substation {substation_id}")
+        return Response({"status": "success"}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Erro ao solicitar imagem: {e}", exc_info=True)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

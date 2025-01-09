@@ -1,285 +1,199 @@
+// src/views/dashboard/CameraMonitoring.jsx
+
 import React, { useState, useEffect, useRef } from 'react'
 import {
   CCard,
   CCardBody,
   CCardHeader,
-  CDropdown,
-  CDropdownToggle,
-  CDropdownMenu,
-  CDropdownItem,
+  CButton,
   CToast,
   CToastBody,
   CToastHeader,
   CToaster
 } from '@coreui/react'
+import { WS_BASE_URL } from 'src/config'
 
-const CameraMonitoring = () => {
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageSrc, setImageSrc] = useState('')
+const CameraMonitoring = ({ roverId, substationId }) => {
+  const [image, setImage] = useState(null)
   const [objectData, setObjectData] = useState([])
   const [toastVisible, setToastVisible] = useState(false)
-  const [viewMode, setViewMode] = useState('camera') // 'camera' or 'capture'
-  const [reconnectAttempts, setReconnectAttempts] = useState(0)
+  const [wsConnected, setWsConnected] = useState(false)
   const canvasRef = useRef(null)
+  const wsRef = useRef(null)
 
-  // Function to show the camera feed
-  const checkCameraConnection = () => {
-    const img = new Image()
-    img.src = 'http://localhost:8000/api/camera-feed/'
-
-    img.onload = () => {
-      setImageSrc(img.src)
-      setImageLoaded(true)
-    }
-
-    img.onerror = () => {
-      setImageLoaded(false)
-      setReconnectAttempts((prev) => prev + 1)
-    }
-  }
-
-  // Function to capture image and show with boxes
-  const fetchImageAndData = () => {
-    fetch('http://localhost:8000/api/imagem/')
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.image && data.objects) {
-          setObjectData(data.objects) // Update box data
-          setImageSrc(`data:image/jpeg;base64,${data.image}`) // Update decoded image
-          setImageLoaded(true)
-          setViewMode('capture') // Switch to capture mode
-        } else {
-          console.error('Error loading data: incomplete data.')
-          setImageLoaded(false)
-        }
-      })
-      .catch((error) => {
-        console.error('Error loading image and data:', error)
-        setImageLoaded(false)
-      })
-  }
-
-  // Function for canvas click handling
-  const handleCanvasClick = (event) => {
-    if (!canvasRef.current || !objectData.length) return
-
-    const canvas = canvasRef.current
-    const rect = canvas.getBoundingClientRect()
-
-    // Get click coordinates relative to the actual canvas size
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const clickX = (event.clientX - rect.left) * scaleX
-    const clickY = (event.clientY - rect.top) * scaleY
-
-    // Find the clicked box
-    objectData.forEach((obj, index) => {
-      const [x1, y1, x2, y2] = obj.box
-
-      // Scaled coordinates for the canvas size
-      const scaledX1 = x1 * canvas.width
-      const scaledY1 = y1 * canvas.height
-      const scaledX2 = x2 * canvas.width
-      const scaledY2 = y2 * canvas.height
-
-      if (clickX >= scaledX1 && clickX <= scaledX2 && clickY >= scaledY1 && clickY <= scaledY2) {
-        // Show the Toast
-        setToastVisible(true)
-
-        // Send the clicked box position to the backend
-        fetch('http://localhost:8000/api/box-click/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ boxIndex: index, coordinates: obj.box, tag: obj.tag }),
-        })
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error('Network response was not ok')
-            }
-            return response.json()
-          })
-          .then((data) => console.log('Box clicked:', data))
-          .catch((error) => console.error('Error sending box position:', error))
-      }
-    })
-  }
-
-  // Function to handle mouse movement and change cursor style
-  const handleMouseMove = (event) => {
-    if (!canvasRef.current || !objectData.length) return
-
-    const canvas = canvasRef.current
-    const rect = canvas.getBoundingClientRect()
-
-    // Get mouse coordinates relative to the actual canvas size
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const mouseX = (event.clientX - rect.left) * scaleX
-    const mouseY = (event.clientY - rect.top) * scaleY
-    let overBox = false
-
-    // Check if the mouse is over any box
-    objectData.forEach((obj) => {
-      const [x1, y1, x2, y2] = obj.box
-
-      // Scaled coordinates for the canvas size
-      const scaledX1 = x1 * canvas.width
-      const scaledY1 = y1 * canvas.height
-      const scaledX2 = x2 * canvas.width
-      const scaledY2 = y2 * canvas.height
-
-      if (mouseX >= scaledX1 && mouseX <= scaledX2 && mouseY >= scaledY1 && mouseY <= scaledY2) {
-        overBox = true
-      }
-    })
-
-    // Update the cursor style
-    canvas.style.cursor = overBox ? 'pointer' : 'default'
-  }
-
-  // Function to switch between capture image and camera feed
-  const handleActionSelect = (action) => {
-    if (action === 'capture') {
-      fetchImageAndData()
-    } else if (action === 'camera') {
-      setViewMode('camera')
-      setReconnectAttempts(0) // Reset reconnection attempts
-      checkCameraConnection()
-    }
-  }
-
+  // 1. Conexão ao WebSocket
   useEffect(() => {
-    if (viewMode === 'camera') {
-      checkCameraConnection()
-      const interval = setInterval(() => {
-        checkCameraConnection()
-      }, 5000) // Attempt reconnection every 5 seconds
+    const ws = new WebSocket(`${WS_BASE_URL}/rovers/${roverId}/`)
+    wsRef.current = ws
 
-      return () => clearInterval(interval)
+    ws.onopen = () => {
+      console.log('WebSocket connected')
+      setWsConnected(true)
     }
-  }, [viewMode])
 
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+
+      if (data.type === 'image_update') {
+        // Recebemos a imagem em base64
+        setImage(data.data.image)
+      } else if (data.type === 'boxes_update') {
+        // Recebemos as boxes para desenhar no canvas
+        setObjectData(data.data.objects)
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      setWsConnected(false)
+    }
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected')
+      setWsConnected(false)
+    }
+
+    return () => {
+      if (ws) ws.close()
+    }
+  }, [roverId])
+
+  // 2. Desenhar a imagem + boxes no canvas
   useEffect(() => {
-    if (imageLoaded && viewMode === 'capture' && canvasRef.current) {
+    if (image && canvasRef.current) {
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
       const img = new Image()
-      img.src = imageSrc
 
       img.onload = () => {
-        // Set canvas dimensions
         canvas.width = img.width
         canvas.height = img.height
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0)
 
-        // Draw the image on the canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height) // Clear the canvas before drawing
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-        // Draw the boxes if data is present
-        if (objectData && objectData.length > 0) {
-          console.log('Number of boxes:', objectData.length)
-
+        if (objectData?.length > 0) {
           objectData.forEach((obj) => {
             const [x1, y1, x2, y2] = obj.box
-
-            // Adjust normalized coordinates for the canvas size
             const scaledX1 = x1 * canvas.width
             const scaledY1 = y1 * canvas.height
             const scaledX2 = x2 * canvas.width
             const scaledY2 = y2 * canvas.height
 
-            // Draw the box
             ctx.strokeStyle = 'yellow'
-            ctx.lineWidth = 4 // Increase line thickness
+            ctx.lineWidth = 4
             ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1)
 
-            // Add the object label
-            ctx.font = 'bold 18px Arial' // Increase font size and weight
+            ctx.font = 'bold 18px Arial'
             ctx.fillStyle = 'yellow'
             ctx.fillText(obj.tag, scaledX1, scaledY1 - 5)
           })
-        } else {
-          console.log('No box data found.')
         }
       }
+
+      img.src = `data:image/jpeg;base64,${image}`
     }
-  }, [imageLoaded, imageSrc, objectData, viewMode])
+  }, [image, objectData])
+
+  // 3. Evento de clique no canvas para identificar boxes
+  const handleCanvasClick = (event) => {
+    if (!canvasRef.current || !objectData?.length) return
+
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const clickX = (event.clientX - rect.left) * scaleX
+    const clickY = (event.clientY - rect.top) * scaleY
+
+    objectData.forEach((obj, index) => {
+      const [x1, y1, x2, y2] = obj.box
+      const scaledX1 = x1 * canvas.width
+      const scaledY1 = y1 * canvas.height
+      const scaledX2 = x2 * canvas.width
+      const scaledY2 = y2 * canvas.height
+
+      if (clickX >= scaledX1 && clickX <= scaledX2 &&
+          clickY >= scaledY1 && clickY <= scaledY2) {
+        // Exibe Toast
+        setToastVisible(true)
+
+        // Envia requisição HTTP para notificar o back-end
+        fetch('/api/box-click/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            boxIndex: index,
+            coordinates: obj.box,
+            tag: obj.tag,
+            rover: roverId,
+            substation: substationId
+          })
+        }).catch((error) => console.error('Error sending box-click:', error))
+      }
+    })
+  }
+
+  const handleRequestImage = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/request-image/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add CSRF token if needed
+          // 'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ rover: roverId, substation: substationId })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('request-image response:', data);
+    } catch (error) {
+      console.error('Error requesting image:', error);
+      // You might want to show this error to the user via a toast notification
+      setToastVisible(true);
+    }
+  }
 
   return (
-    <>
-      <CCard style={{ maxWidth: '960px', margin: '0 auto' }}>
-        <CCardHeader>
-          Monitoramento de Câmera
-          <div style={{ float: 'right' }}>
-            <CDropdown>
-              <CDropdownToggle color="primary">Ações</CDropdownToggle>
-              <CDropdownMenu>
-                <CDropdownItem onClick={() => handleActionSelect('capture')}>Capturar Imagem</CDropdownItem>
-                <CDropdownItem onClick={() => handleActionSelect('camera')}>Exibir Câmera</CDropdownItem>
-              </CDropdownMenu>
-            </CDropdown>
-          </div>
-        </CCardHeader>
-        <CCardBody style={{ position: 'relative', padding: 0 }}>
-          {viewMode === 'camera' ? (
-            imageLoaded ? (
-              <img
-                src="http://localhost:8000/api/camera-feed/"
-                alt="Camera"
-                style={{ width: '100%', height: 'auto' }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  height: '0',
-                  paddingTop: '56.25%', // Aspect ratio for 16:9
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f0f0f0',
-                  color: '#000',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    fontSize: '1.5rem',
-                    textAlign: 'center',
-                  }}
-                >
-                  Esperando por conexão da câmera...
-                </div>
-              </div>
-            )
-          ) : (
-            <canvas
-              ref={canvasRef}
-              style={{ width: '100%', height: 'auto' }}
-              onClick={handleCanvasClick}
-              onMouseMove={handleMouseMove} // Add this line to handle mouse movement
-            />
-          )}
-        </CCardBody>
-      </CCard>
-      <CToaster
-        position="top-right"
-        style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 9999 }}
-      >
+    <CCard>
+      <CCardHeader className="d-flex justify-content-between align-items-center">
+        <div>
+          <h5 className="m-0">Monitoramento de Câmera</h5>
+        </div>
+        {!wsConnected && <div className="text-danger fw-bold">Desconectado</div>}
+
+        {/* Botão para Capturar Imagem */}
+        <CButton color="primary" onClick={handleRequestImage}>
+          Capturar Imagem
+        </CButton>
+      </CCardHeader>
+
+      <CCardBody style={{ padding: 0 }}>
+        <canvas
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          style={{ width: '100%', height: 'auto', cursor: 'pointer' }}
+        />
+      </CCardBody>
+
+      <CToaster position="top-right">
         {toastVisible && (
-          <CToast autohide={true} delay={3000} visible={toastVisible} onClose={() => setToastVisible(false)}>
-            <CToastHeader closeButton>Notificação</CToastHeader>
-            <CToastBody>Solicitação enviada</CToastBody>
+          <CToast
+            autohide={true}
+            delay={3000}
+            visible={toastVisible}
+            onClose={() => setToastVisible(false)}
+          >
+            <CToastHeader>Notificação</CToastHeader>
+            <CToastBody>Box selecionada</CToastBody>
           </CToast>
         )}
       </CToaster>
-    </>
+    </CCard>
   )
 }
 

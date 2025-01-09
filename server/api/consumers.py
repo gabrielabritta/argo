@@ -65,3 +65,26 @@ class RoverConsumer(AsyncWebsocketConsumer):
                 }))
             except:
                 logger.error("Falha ao enviar mensagem de erro para o cliente")
+    async def image_update(self, event):
+        """
+        Handler para atualizações de imagem.
+        """
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'image_update',
+                'data': event['data']
+            }))
+        except Exception as e:
+            logger.error(f"Error in image_update: {str(e)}")
+
+    async def boxes_update(self, event):
+        """
+        Handler para atualizações de boxes.
+        """
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'boxes_update',
+                'data': event['data']
+            }))
+        except Exception as e:
+            logger.error(f"Error in boxes_update: {str(e)}")

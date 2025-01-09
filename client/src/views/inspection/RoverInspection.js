@@ -1,3 +1,5 @@
+// src/views/inspection/RoverInspection.jsx
+
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import {
@@ -28,6 +30,7 @@ const RoverInspection = () => {
   const [telemetry, setTelemetry] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [substationId, setSubstationId] = useState(null)
 
   useEffect(() => {
     const fetchRoverData = async () => {
@@ -37,6 +40,7 @@ const RoverInspection = () => {
         const response = await fetch(`http://localhost:8000/api/rovers/${roverId}/`)
         const data = await response.json()
         setRoverInfo(data)
+        setSubstationId(data.substation)  // Supondo que a resposta inclui 'substation' como identifier
         setError(null)
       } catch (err) {
         setError('Falha ao carregar dados do rover')
@@ -180,7 +184,8 @@ const RoverInspection = () => {
             </CTabPane>
 
             <CTabPane visible={activeTab === 'camera'}>
-              <CameraMonitoring roverId={roverId} />
+              {/* Passar substationId para CameraMonitoring */}
+              <CameraMonitoring roverId={roverId} substationId={substationId} />
             </CTabPane>
 
             <CTabPane visible={activeTab === 'location'}>

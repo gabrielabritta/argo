@@ -12,7 +12,8 @@ from .views import (
     RoverViewSet,
     SubstationViewSet,
     list_active_rovers,
-    health_check
+    health_check,
+    request_image_view
 )
 
 router = DefaultRouter()
@@ -30,4 +31,5 @@ urlpatterns = [
     path('select-mission/', select_mission_view, name='select-mission'),
     path('gps-data/', GPSDataView.as_view(), name='gps-data'),
     path('active-rovers/', list_active_rovers, name='active-rovers'),
+    path('request-image/', request_image_view, name='request-image'),  # Removido o prefixo 'api/'
 ]

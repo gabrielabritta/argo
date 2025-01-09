@@ -7,64 +7,93 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-
-// Importando o SVG diretamente
 import mapArrowLeft from './map-arrow-left.svg'
-import argoSvg from './argo1.svg' // Importando o SVG
+import argoSvg from './argo1.svg'
 
-const LocationMonitoring = () => {
+const LocationMonitoring = ({ roverId, substationId }) => {
   const [map, setMap] = useState(null)
   const [marker, setMarker] = useState(null)
   const [gpsError, setGpsError] = useState(false)
-  const [position, setPosition] = useState({ latitude: null, longitude: null, compass: null })
-  const [controlsFocused, setControlsFocused] = useState(false) // Para controlar o foco nos controles
+  const [position, setPosition] = useState({
+    latitude: null,
+    longitude: null,
+    compass: 0, // valor padrão se não vier do backend
+  })
+  const [controlsFocused, setControlsFocused] = useState(false)
+
+  // Criamos um overlay de imagem para zoom alto
+  const svgBounds = [
+    [-3.126, -41.77],
+    [-3.121, -41.76],
+  ]
+  const svgOverlay = L.imageOverlay(argoSvg, svgBounds)
 
   useEffect(() => {
-    const mapElement = document.getElementById('map')
-    if (mapElement && !map) {
-      const initialMap = L.map(mapElement).setView([-3.1232575653870027, -41.765995717278315], 16)
-      const baseLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          maxZoom: 25,
-          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ',
-        },
-      ).addTo(initialMap)
-      setMap(initialMap)
+    // Inicializa o mapa somente uma vez
+    if (!map) {
+      const mapElement = document.getElementById('map')
+      if (mapElement) {
+        const initialMap = L.map(mapElement).setView([-3.12325756, -41.76599571], 16)
 
-      // Monitora mudanças de zoom
-      initialMap.on('zoomend', () => {
-        const zoomLevel = initialMap.getZoom()
-        if (zoomLevel > 17) {
-          // Adiciona a camada SVG
-          if (!initialMap.hasLayer(svgOverlay)) {
-            baseLayer.remove()
-            svgOverlay.addTo(initialMap)
+        const baseLayer = L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          {
+            maxZoom: 25,
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ',
+          },
+        ).addTo(initialMap)
+
+        // Controlar a troca do tileLayer pelo svgOverlay dependendo do zoom
+        initialMap.on('zoomend', () => {
+          const zoomLevel = initialMap.getZoom()
+          if (zoomLevel > 17) {
+            // Remove a camada de satélite e coloca o overlay
+            if (!initialMap.hasLayer(svgOverlay)) {
+              baseLayer.remove()
+              svgOverlay.addTo(initialMap)
+            }
+          } else {
+            if (initialMap.hasLayer(svgOverlay)) {
+              svgOverlay.remove()
+              baseLayer.addTo(initialMap)
+            }
           }
-        } else {
-          // Remove a camada SVG e volta ao tile normal
-          if (initialMap.hasLayer(svgOverlay)) {
-            svgOverlay.remove()
-            baseLayer.addTo(initialMap)
-          }
-        }
-      })
+        })
+
+        setMap(initialMap)
+      }
     }
   }, [map])
 
+  // Buscar GPS data do backend
   useEffect(() => {
-    if (map) {
+    if (map && roverId && substationId) {
       const fetchGPSData = async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/gps-data/')
+          // AQUI: Passamos rover e substation como query params
+          const url = `http://localhost:8000/api/gps-data/?rover=${roverId}&substation=${substationId}`
+          const response = await fetch(url)
+          if (!response.ok) {
+            // Se deu 400 ou outro, disparamos erro
+            throw new Error(`GPS data fetch failed: HTTP ${response.status}`)
+          }
           const data = await response.json()
 
-          if (data.status === 1) {
-            const { latitude, longitude, compass } = data
-            setPosition({ latitude, longitude, compass })
+          // Ajuste aqui dependendo do que seu backend retorna:
+          // Se retorna: {"latitude": X, "longitude": Y, "status": "em missão"}...
+          // E se não retorna "compass", definimos 0 ou algo.
+          if (data.latitude && data.longitude) {
+            // Se tiver latitude e longitude, atualizamos
+            setPosition((prev) => ({
+              ...prev,
+              latitude: data.latitude,
+              longitude: data.longitude,
+              compass: data.compass || 0, // se o backend não mandar compass, setamos 0
+            }))
             setGpsError(false)
           } else {
-            console.error('GPS data is not available')
+            // Se não vier lat/long, consideramos erro
+            console.error('GPS data is incomplete:', data)
             setGpsError(true)
           }
         } catch (error) {
@@ -77,24 +106,26 @@ const LocationMonitoring = () => {
       const intervalId = setInterval(fetchGPSData, 5000)
       return () => clearInterval(intervalId)
     }
-  }, [map])
+  }, [map, roverId, substationId])
 
+  // Atualiza o marker no mapa quando position muda
   useEffect(() => {
     if (map && position.latitude !== null && position.longitude !== null) {
       const gpsIcon = L.divIcon({
         className: 'custom-marker',
         html: `<img src="${mapArrowLeft}" style="transform: rotate(${position.compass + 90}deg);" alt="GPS Icon" />`,
-        iconSize: [30, 30], // Ajuste o tamanho conforme necessário
+        iconSize: [30, 30],
       })
 
       if (!marker) {
-        const initialMarker = L.marker([position.latitude, position.longitude], {
+        const newMarker = L.marker([position.latitude, position.longitude], {
           icon: gpsIcon,
         }).addTo(map)
-        setMarker(initialMarker)
+        setMarker(newMarker)
       } else {
+        // Atualiza posição do marker e a rotação do ícone
         marker.setLatLng([position.latitude, position.longitude])
-        const iconElement = marker.getElement().querySelector('img')
+        const iconElement = marker.getElement()?.querySelector('img')
         if (iconElement) {
           iconElement.style.transform = `rotate(${position.compass + 90}deg)`
         }
@@ -102,11 +133,13 @@ const LocationMonitoring = () => {
     }
   }, [map, marker, position])
 
+  // Envia comandos de direção com roverId e substationId via query string
   const handleButtonClick = (direction) => {
     const button = document.getElementById(`btn-${direction}`)
-    button.classList.add('pressed')
+    button?.classList.add('pressed')
 
-    fetch('http://localhost:8000/api/direction/', {
+    const directionUrl = `http://localhost:8000/api/direction/?rover=${roverId}&substation=${substationId}`
+    fetch(directionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -116,22 +149,27 @@ const LocationMonitoring = () => {
     })
       .then((response) => {
         if (!response.ok) {
-          throw new Error('Network response was not ok')
+          throw new Error(`Direction request failed: HTTP ${response.status}`)
         }
         return response.json()
       })
-      .then((data) => console.log('Resposta do backend:', data))
-      .catch((error) => console.error('Erro ao enviar a direção:', error))
+      .then((data) => {
+        console.log('Resposta do backend (direction):', data)
+      })
+      .catch((error) => {
+        console.error('Erro ao enviar a direção:', error)
+      })
       .finally(() => {
-        setTimeout(() => button.classList.remove('pressed'), 200)
+        setTimeout(() => button?.classList.remove('pressed'), 200)
       })
   }
 
+  // Captura o CSRF token
   const getCookie = (name) => {
     let cookieValue = null
     if (document.cookie && document.cookie !== '') {
       const cookies = document.cookie.split(';')
-      for (let i = 0; cookies.length > i; i++) {
+      for (let i = 0; i < cookies.length; i++) {
         const cookie = cookies[i].trim()
         if (cookie.substring(0, name.length + 1) === name + '=') {
           cookieValue = decodeURIComponent(cookie.substring(name.length + 1))
@@ -142,7 +180,7 @@ const LocationMonitoring = () => {
     return cookieValue
   }
 
-  // Evento de teclado para capturar as setas quando o bloco estiver focado
+  // Teclas de setas para enviar comandos
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (controlsFocused) {
@@ -166,18 +204,10 @@ const LocationMonitoring = () => {
     }
 
     window.addEventListener('keydown', handleKeyDown)
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [controlsFocused])
-
-  // Define o SVG Overlay
-  const svgBounds = [
-    [-3.126, -41.77],
-    [-3.121, -41.76],
-  ] // Ajuste conforme necessário
-  const svgOverlay = L.imageOverlay(argoSvg, svgBounds)
 
   return (
     <CRow>
@@ -186,12 +216,15 @@ const LocationMonitoring = () => {
           <CCardHeader>Monitoramento de Localização</CCardHeader>
           <CCardBody>
             {gpsError && (
-              <CAlert color="danger">Falha ao obter dados de GPS. Tentando reconectar...</CAlert>
+              <CAlert color="danger">
+                Falha ao obter dados de GPS. Tentando reconectar...
+              </CAlert>
             )}
             <div id="map" style={{ height: '500px' }}></div>
           </CCardBody>
         </CCard>
       </CCol>
+
       <CCol md={4}>
         <CCard>
           <CCardHeader>Controles</CCardHeader>
@@ -203,12 +236,20 @@ const LocationMonitoring = () => {
               onBlur={() => setControlsFocused(false)}
             >
               <div className="control-row control-up">
-                <IconButton id="btn-up" color="primary" onClick={() => handleButtonClick('up')}>
+                <IconButton
+                  id="btn-up"
+                  color="primary"
+                  onClick={() => handleButtonClick('up')}
+                >
                   <ArrowUpwardIcon fontSize="large" />
                 </IconButton>
               </div>
               <div className="control-row control-middle">
-                <IconButton id="btn-left" color="primary" onClick={() => handleButtonClick('left')}>
+                <IconButton
+                  id="btn-left"
+                  color="primary"
+                  onClick={() => handleButtonClick('left')}
+                >
                   <ArrowBackIcon fontSize="large" />
                 </IconButton>
                 <IconButton
@@ -220,7 +261,11 @@ const LocationMonitoring = () => {
                 </IconButton>
               </div>
               <div className="control-row control-down">
-                <IconButton id="btn-down" color="primary" onClick={() => handleButtonClick('down')}>
+                <IconButton
+                  id="btn-down"
+                  color="primary"
+                  onClick={() => handleButtonClick('down')}
+                >
                   <ArrowDownwardIcon fontSize="large" />
                 </IconButton>
               </div>
@@ -228,6 +273,7 @@ const LocationMonitoring = () => {
           </CCardBody>
         </CCard>
       </CCol>
+
       <style>
         {`
           .control-container {
@@ -236,6 +282,7 @@ const LocationMonitoring = () => {
             align-items: center;
             border-radius: 5px;
             width: 100%;
+            outline: none; /* importante para focar */
           }
           .control-row {
             display: flex;
