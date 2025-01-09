@@ -9,7 +9,7 @@ import {
   CToast,
   CToastBody,
   CToastHeader,
-  CToaster
+  CToaster,
 } from '@coreui/react'
 import { WS_BASE_URL } from 'src/config'
 
@@ -33,12 +33,13 @@ const CameraMonitoring = ({ roverId, substationId }) => {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      console.log('WebSocket received:', data) // Debug
 
       if (data.type === 'image_update') {
-        // Recebemos a imagem em base64
+        // Atualizar imagem
         setImage(data.data.image)
+        console.log('Image updated') // Debug
       } else if (data.type === 'boxes_update') {
-        // Recebemos as boxes para desenhar no canvas
         setObjectData(data.data.objects)
       }
     }
@@ -66,33 +67,16 @@ const CameraMonitoring = ({ roverId, substationId }) => {
       const img = new Image()
 
       img.onload = () => {
+        console.log('Image loaded, dimensions:', img.width, 'x', img.height) // Debug
         canvas.width = img.width
         canvas.height = img.height
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
-
-        if (objectData?.length > 0) {
-          objectData.forEach((obj) => {
-            const [x1, y1, x2, y2] = obj.box
-            const scaledX1 = x1 * canvas.width
-            const scaledY1 = y1 * canvas.height
-            const scaledX2 = x2 * canvas.width
-            const scaledY2 = y2 * canvas.height
-
-            ctx.strokeStyle = 'yellow'
-            ctx.lineWidth = 4
-            ctx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1)
-
-            ctx.font = 'bold 18px Arial'
-            ctx.fillStyle = 'yellow'
-            ctx.fillText(obj.tag, scaledX1, scaledY1 - 5)
-          })
-        }
       }
 
       img.src = `data:image/jpeg;base64,${image}`
     }
-  }, [image, objectData])
+  }, [image])
 
   // 3. Evento de clique no canvas para identificar boxes
   const handleCanvasClick = (event) => {
@@ -112,8 +96,7 @@ const CameraMonitoring = ({ roverId, substationId }) => {
       const scaledX2 = x2 * canvas.width
       const scaledY2 = y2 * canvas.height
 
-      if (clickX >= scaledX1 && clickX <= scaledX2 &&
-          clickY >= scaledY1 && clickY <= scaledY2) {
+      if (clickX >= scaledX1 && clickX <= scaledX2 && clickY >= scaledY1 && clickY <= scaledY2) {
         // Exibe Toast
         setToastVisible(true)
 
@@ -126,8 +109,8 @@ const CameraMonitoring = ({ roverId, substationId }) => {
             coordinates: obj.box,
             tag: obj.tag,
             rover: roverId,
-            substation: substationId
-          })
+            substation: substationId,
+          }),
         }).catch((error) => console.error('Error sending box-click:', error))
       }
     })
@@ -137,24 +120,23 @@ const CameraMonitoring = ({ roverId, substationId }) => {
     try {
       const response = await fetch('http://localhost:8000/api/request-image/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add CSRF token if needed
-          // 'X-CSRFToken': getCsrfToken(),
-        },
-        body: JSON.stringify({ rover: roverId, substation: substationId })
-      });
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rover: roverId,
+          substation: substationId, // Adicionar substationId
+        }),
+      })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json();
-      console.log('request-image response:', data);
+      const data = await response.json()
+      console.log('request-image response:', data)
     } catch (error) {
-      console.error('Error requesting image:', error);
-      // You might want to show this error to the user via a toast notification
-      setToastVisible(true);
+      console.error('Error requesting image:', error)
+      setToastVisible(true)
     }
   }
 

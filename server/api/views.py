@@ -27,6 +27,16 @@ redis_client = redis.Redis(host='redis', port=6379, db=1)
 class RoverViewSet(viewsets.ModelViewSet):
     queryset = Rover.objects.all()
     serializer_class = RoverSerializer
+    lookup_field = 'identifier'
+
+    def get_queryset(self):
+        queryset = Rover.objects.all()
+        substation_id = self.request.query_params.get('substation', None)
+
+        if substation_id:
+            queryset = queryset.filter(substation__identifier=substation_id)
+
+        return queryset.filter(is_active=True)
 
     def create(self, request, *args, **kwargs):
         """
@@ -107,6 +117,7 @@ class RoverViewSet(viewsets.ModelViewSet):
 class SubstationViewSet(viewsets.ModelViewSet):
     queryset = Substation.objects.all()
     serializer_class = SubstationSerializer
+    lookup_field = 'identifier'
 
 def clean_rover_redis_data(rover):
     """Limpa dados do rover no Redis quando ele é deletado"""
@@ -449,9 +460,6 @@ def health_check(request):
 
 @api_view(['POST'])
 def request_image_view(request):
-    """
-    Endpoint para solicitar que o rover publique uma imagem no tópico MQTT.
-    """
     try:
         body = json.loads(request.body)
         rover_id = body.get('rover')
@@ -473,12 +481,14 @@ def request_image_view(request):
         mqtt_client = mqtt.Client()
         mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
 
-        # Publicar no tópico de comandos do rover
+        # Publicar no tópico de comandos específico do rover
         command_topic = f"substations/{substation_id}/rovers/{rover_id}/commands"
-        mqtt_client.publish(command_topic, json.dumps(command_data))
+
+        # Converter para JSON e publicar
+        mqtt_client.publish(command_topic, json.dumps(command_data), qos=1)
         mqtt_client.disconnect()
 
-        logger.info(f"[request_image_view] Solicitado capture_image para rover {rover_id} na substation {substation_id}")
+        logger.info(f"[request_image_view] Comando de captura enviado para rover {rover_id} na substation {substation_id}")
         return Response({"status": "success"}, status=status.HTTP_200_OK)
 
     except Exception as e:

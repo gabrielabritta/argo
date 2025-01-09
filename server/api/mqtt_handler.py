@@ -60,17 +60,30 @@ class MQTTHandler:
 
     def on_message(self, client, userdata, msg):
         try:
-            logger.info(f"Mensagem recebida no tópico: {msg.topic}")
+            logger.info(f"[MQTT] Mensagem recebida no tópico: {msg.topic}")
+            logger.info(f"[MQTT] Payload: {msg.payload}")
             parts = msg.topic.split('/')
             if len(parts) < 5:
-                logger.error(f"Formato de tópico inválido: {msg.topic}")
+                logger.error(f"[MQTT] Formato de tópico inválido: {msg.topic}")
                 return
 
             substation_id = parts[1]
             rover_id = parts[3]
             message_type = parts[4]
 
-            if message_type == 'image':
+            logger.info(f"[MQTT] Processando mensagem tipo {message_type} para rover {rover_id}")
+
+            # Processar comando de captura de imagem
+            if message_type == 'commands':
+                try:
+                    command_data = json.loads(msg.payload.decode())
+                    logger.info(f"[MQTT] Comando recebido: {command_data}")
+
+                    if command_data.get('command') == 'capture_image':
+                        logger.info(f"[MQTT] Iniciando captura de imagem para rover {rover_id}")
+                except json.JSONDecodeError:
+                    logger.error(f"[MQTT] Falha ao decodificar comando JSON")
+            elif message_type == 'image':
                 self.handle_image_message(substation_id, rover_id, msg.payload)
             elif message_type == 'boxes':
                 self.handle_boxes_message(rover_id, msg.payload)
@@ -80,24 +93,23 @@ class MQTTHandler:
                 logger.warning(f"Tipo de mensagem desconhecido: {message_type}")
 
         except Exception as e:
-            logger.error(f"Erro no handler on_message: {e}", exc_info=True)
+            logger.error(f"[MQTT] Erro no handler on_message: {e}", exc_info=True)
 
     def handle_image_message(self, substation_id, rover_id, payload):
         """
         Processa mensagens de imagem e envia via WebSocket
         """
         try:
-            # Decodificar imagem base64
-            image_data = payload.decode('utf-8')
+            # Converter bytes da imagem para base64
+            import base64
+            image_data = base64.b64encode(payload).decode('utf-8')
 
-            logger.info(f"[handle_image_message] Recebida imagem de {rover_id} na substation {substation_id}")
-            logger.debug(f"[handle_image_message] Payload de imagem: {image_data[:50]}...")  # Log parcial
+            logger.info(f"[handle_image_message] Recebida imagem de {rover_id}")
 
-            # (Opcional) Salvar no Redis com chave "image:sub{...}:rover{...}"
+            # Salvar no Redis
             if self.redis_client:
                 image_key = f'image:sub{substation_id}:rover{rover_id}'
                 self.redis_client.setex(image_key, 300, image_data)
-                logger.info(f"[handle_image_message] Imagem salva no Redis com a chave: {image_key}")
 
             # Enviar via WebSocket
             async_to_sync(self.channel_layer.group_send)(
