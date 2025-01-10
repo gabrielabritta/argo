@@ -13,7 +13,8 @@ from .views import (
     SubstationViewSet,
     list_active_rovers,
     health_check,
-    request_image_view
+    request_image_view,
+    process_mapping
 )
 
 router = DefaultRouter()
@@ -31,5 +32,6 @@ urlpatterns = [
     path('select-mission/', select_mission_view, name='select-mission'),
     path('gps-data/', GPSDataView.as_view(), name='gps-data'),
     path('active-rovers/', list_active_rovers, name='active-rovers'),
-    path('request-image/', request_image_view, name='request-image'),  # Removido o prefixo 'api/'
+    path('request-image/', request_image_view, name='request-image'), 
+    path('process-mapping/', process_mapping, name='process-mapping'),
 ]

@@ -18,6 +18,7 @@ from redis import Redis
 import redis
 import requests
 from .models import Rover, Substation, RoverTelemetry
+from .mapping_manager import MapManager
 from .serializers import RoverSerializer, SubstationSerializer
 
 logger = logging.getLogger(__name__)
@@ -494,3 +495,58 @@ def request_image_view(request):
     except Exception as e:
         logger.error(f"Erro ao solicitar imagem: {e}", exc_info=True)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def process_mapping(request):
+    """
+    Endpoint para processar o mapeamento de um rover
+    """
+    try:
+        rover_id = request.data.get('rover_id')
+        substation_id = request.data.get('substation_id')
+
+        if not rover_id or not substation_id:
+            return JsonResponse(
+                {'error': 'rover_id e substation_id são obrigatórios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Configurar pasta base para mapas
+        base_folder = os.path.join(os.getenv('ROVER_MAPS_DIR', '/tmp/rover_maps'))
+
+        # Processar o mapeamento
+        success, result = MapManager.process_mapping(
+            rover_id=rover_id,
+            base_folder=base_folder
+        )
+
+        if success:
+            # Construir URL do mapa
+            map_filename = f"rover_{rover_id}_latest_map.png"
+            map_path = os.path.join(base_folder, f"rover_{rover_id}", map_filename)
+
+            # Verificar se o arquivo existe
+            if os.path.exists(map_path):
+                # Em produção, você deve servir isso através de um servidor web adequado
+                map_url = f"/maps/{map_filename}"
+                return JsonResponse({
+                    'status': 'success',
+                    'processing_time': result,
+                    'image_url': map_url
+                })
+            else:
+                return JsonResponse({
+                    'error': 'Arquivo de mapa não encontrado após processamento'
+                }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return JsonResponse({
+                'error': f'Falha no processamento do mapa: {result}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except Exception as e:
+        logger.error(f"Erro ao processar mapeamento: {str(e)}", exc_info=True)
+        return JsonResponse(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

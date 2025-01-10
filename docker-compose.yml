@@ -25,6 +25,7 @@ services:
       - "8000:8000"
     volumes:
       - ./server:/app
+      - rover-maps:/tmp/rover_maps
     environment:
       - MQTT_HOST=mqtt
       - MQTT_PORT=1883
@@ -102,3 +103,4 @@ volumes:
   postgres-data:
   redis-data:
   pgadmin-data:
+  rover-maps:

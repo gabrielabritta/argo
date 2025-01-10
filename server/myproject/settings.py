@@ -156,6 +156,8 @@ REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
 
 STATIC_URL = 'static/'
 
+ROVER_MAPS_DIR = os.getenv('ROVER_MAPS_DIR', '/tmp/rover_maps')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 

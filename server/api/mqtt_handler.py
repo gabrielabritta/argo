@@ -51,7 +51,7 @@ class MQTTHandler:
             topics = [
                 ("substations/+/rovers/+/telemetry", 1),  # QoS 1 para garantir entrega
                 ("substations/+/rovers/+/image", 1),
-                ("substations/+/rovers/+/boxes", 1),
+                ("substations/+/rovers/+/boxes", 1), 
             ]
             client.subscribe(topics)
             logger.info(f"Inscrito nos tópicos: {topics}")
