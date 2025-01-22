@@ -11,7 +11,7 @@ import {
   CToastHeader,
   CToaster,
 } from '@coreui/react'
-import { WS_BASE_URL } from 'src/config'
+import { WS_BASE_URL } from 'src/config' // Assegure-se de que este caminho está correto
 
 const CameraMonitoring = ({ roverId, substationId }) => {
   const [image, setImage] = useState(null)
@@ -27,30 +27,34 @@ const CameraMonitoring = ({ roverId, substationId }) => {
     wsRef.current = ws
 
     ws.onopen = () => {
-      console.log('WebSocket connected')
+      console.log('WebSocket conectado')
       setWsConnected(true)
     }
 
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      console.log('WebSocket received:', data) // Debug
+      try {
+        const data = JSON.parse(event.data)
+        console.log('WebSocket recebeu:', data) // Debug
 
-      if (data.type === 'image_update') {
-        // Atualizar imagem
-        setImage(data.data.image)
-        console.log('Image updated') // Debug
-      } else if (data.type === 'boxes_update') {
-        setObjectData(data.data.objects)
+        if (data.type === 'image_update') {
+          // Atualizar imagem
+          setImage(data.data.image)
+          console.log('Imagem atualizada') // Debug
+        } else if (data.type === 'boxes_update') {
+          setObjectData(data.data.objects)
+        }
+      } catch (err) {
+        console.error('Erro ao parsear mensagem WebSocket:', err)
       }
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
+      console.error('Erro no WebSocket:', error)
       setWsConnected(false)
     }
 
     ws.onclose = () => {
-      console.log('WebSocket disconnected')
+      console.log('WebSocket desconectado')
       setWsConnected(false)
     }
 
@@ -67,16 +71,43 @@ const CameraMonitoring = ({ roverId, substationId }) => {
       const img = new Image()
 
       img.onload = () => {
-        console.log('Image loaded, dimensions:', img.width, 'x', img.height) // Debug
+        console.log('Imagem carregada, dimensões:', img.width, 'x', img.height) // Debug
         canvas.width = img.width
         canvas.height = img.height
         ctx.clearRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
+
+        // Desenhar boxes
+        objectData.forEach((obj) => {
+          const [x1, y1, x2, y2] = obj.box
+          const scaledX1 = x1 * canvas.width
+          const scaledY1 = y1 * canvas.height
+          const scaledX2 = x2 * canvas.width
+          const scaledY2 = y2 * canvas.height
+          const boxWidth = scaledX2 - scaledX1
+          const boxHeight = scaledY2 - scaledY1
+
+          // Desenhar retângulo da box
+          ctx.strokeStyle = '#00FF00' // Cor da borda
+          ctx.lineWidth = 2
+          ctx.strokeRect(scaledX1, scaledY1, boxWidth, boxHeight)
+
+          // Desenhar etiqueta (tag) se existir
+          if (obj.tag) {
+            ctx.fillStyle = '#00FF00' // Cor da etiqueta
+            ctx.font = '16px Arial'
+            ctx.fillText(obj.tag, scaledX1, scaledY1 - 5)
+          }
+        })
+      }
+
+      img.onerror = (err) => {
+        console.error('Erro ao carregar a imagem:', err)
       }
 
       img.src = `data:image/jpeg;base64,${image}`
     }
-  }, [image])
+  }, [image, objectData])
 
   // 3. Evento de clique no canvas para identificar boxes
   const handleCanvasClick = (event) => {
@@ -89,6 +120,9 @@ const CameraMonitoring = ({ roverId, substationId }) => {
     const clickX = (event.clientX - rect.left) * scaleX
     const clickY = (event.clientY - rect.top) * scaleY
 
+    // Variável para verificar se algum box foi clicado
+    let boxClicked = false
+
     objectData.forEach((obj, index) => {
       const [x1, y1, x2, y2] = obj.box
       const scaledX1 = x1 * canvas.width
@@ -97,6 +131,8 @@ const CameraMonitoring = ({ roverId, substationId }) => {
       const scaledY2 = y2 * canvas.height
 
       if (clickX >= scaledX1 && clickX <= scaledX2 && clickY >= scaledY1 && clickY <= scaledY2) {
+        boxClicked = true
+
         // Exibe Toast
         setToastVisible(true)
 
@@ -111,14 +147,22 @@ const CameraMonitoring = ({ roverId, substationId }) => {
             rover: roverId,
             substation: substationId,
           }),
-        }).catch((error) => console.error('Error sending box-click:', error))
+        }).catch((error) => console.error('Erro ao enviar box-click:', error))
       }
     })
+
+    // Opcional: Exibir Toast diferente se nenhum box foi clicado
+    if (!boxClicked) {
+      // Você pode optar por não exibir nada ou exibir uma mensagem diferente
+      console.log('Nenhum box foi clicado')
+    }
   }
 
+  // 4. Função para solicitar uma nova imagem
   const handleRequestImage = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/request-image/', {
+      const response = await fetch('/api/request-image/', {
+        // Use URL relativa
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -129,13 +173,13 @@ const CameraMonitoring = ({ roverId, substationId }) => {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        throw new Error(errorData.error || `Erro HTTP! status: ${response.status}`)
       }
 
       const data = await response.json()
-      console.log('request-image response:', data)
+      console.log('Resposta request-image:', data)
     } catch (error) {
-      console.error('Error requesting image:', error)
+      console.error('Erro ao solicitar imagem:', error)
       setToastVisible(true)
     }
   }
@@ -162,6 +206,7 @@ const CameraMonitoring = ({ roverId, substationId }) => {
         />
       </CCardBody>
 
+      {/* Toaster para notificações */}
       <CToaster position="top-right">
         {toastVisible && (
           <CToast
@@ -170,7 +215,7 @@ const CameraMonitoring = ({ roverId, substationId }) => {
             visible={toastVisible}
             onClose={() => setToastVisible(false)}
           >
-            <CToastHeader>Notificação</CToastHeader>
+            <CToastHeader closeButton={false}>Notificação</CToastHeader>
             <CToastBody>Box selecionada</CToastBody>
           </CToast>
         )}
