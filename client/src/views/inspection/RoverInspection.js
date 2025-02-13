@@ -1,7 +1,7 @@
 // src/views/inspection/RoverInspection.jsx
 
 import React, { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   CCard,
   CCardBody,
@@ -24,13 +24,13 @@ import CameraMonitoring from '../dashboard/CameraMonitoring'
 import LocationMonitoring from '../dashboard/LocationMonitoring'
 
 const RoverInspection = () => {
-  const { roverId } = useParams()
+  const { substationId, roverId } = useParams()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('info')
   const [roverInfo, setRoverInfo] = useState(null)
   const [telemetry, setTelemetry] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [substationId, setSubstationId] = useState(null)
 
   useEffect(() => {
     const fetchRoverData = async () => {
@@ -39,8 +39,14 @@ const RoverInspection = () => {
         // Buscar informações do rover
         const response = await fetch(`http://localhost:8000/api/rovers/${roverId}/`)
         const data = await response.json()
+        
+        if (!substationId) {
+          // Se não tiver substationId na URL, redirecionar para a URL correta
+          navigate(`/inspect/substation/${data.substation}/rover/${roverId}`, { replace: true })
+          return
+        }
+        
         setRoverInfo(data)
-        setSubstationId(data.substation)  // Supondo que a resposta inclui 'substation' como identifier
         setError(null)
       } catch (err) {
         setError('Falha ao carregar dados do rover')
@@ -50,7 +56,7 @@ const RoverInspection = () => {
     }
 
     fetchRoverData()
-  }, [roverId])
+  }, [roverId, substationId, navigate])
 
   // Efeito para buscar telemetria em tempo real
   useEffect(() => {

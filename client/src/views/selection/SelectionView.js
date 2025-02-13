@@ -84,8 +84,9 @@ const SelectionView = () => {
   };
 
   const handleInspectRover = () => {
-    if (!selectedRover) return;
-    navigate(`/inspect/rover/${selectedRover}`);
+    if (selectedRover && selectedSubstation) {
+      navigate(`/inspect/substation/${selectedSubstation}/rover/${selectedRover}`)
+    }
   };
 
   return (

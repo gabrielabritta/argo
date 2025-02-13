@@ -63,10 +63,18 @@ const routes = [
   { path: '/selection', name: 'Seleção', element: SelectionView },
   {
     path: '/inspect/substation/:substationId',
-    name: 'Inspeção de Subestação',
+    name: 'Subestação',
     element: SubstationInspection,
   },
-  { path: '/inspect/rover/:roverId', name: 'Inspeção de Rover', element: RoverInspection },
+  {
+    path: '/inspect/substation/:substationId/rover/:roverId',
+    name: 'Rover',
+    element: RoverInspection,
+  },
+  {
+    path: '/inspect/rover/:roverId',
+    element: RoverInspection,
+  },
   { path: '/controle/camera', name: 'Camera', element: Camera },
   { path: '/controle/localizacao', name: 'Localização', element: Localizacao },
   { path: '/controle/mapeamento', name: 'Mapeamento', element: Mapeamento },

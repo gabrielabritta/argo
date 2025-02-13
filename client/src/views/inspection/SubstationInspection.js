@@ -173,7 +173,7 @@ const SubstationInspection = () => {
 
   // Função para navegar para a inspeção de um rover específico
   const handleRoverClick = (roverId) => {
-    navigate(`/inspect/rover/${roverId}`)
+    navigate(`/inspect/substation/${substationId}/rover/${roverId}`)
   }
 
   // Exibir spinner enquanto carrega os dados iniciais
