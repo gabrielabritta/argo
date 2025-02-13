@@ -100,9 +100,9 @@ class MQTTHandler:
         Processa mensagens de imagem e envia via WebSocket
         """
         try:
-            # Converter bytes da imagem para base64
-            import base64
-            image_data = base64.b64encode(payload).decode('utf-8')
+            # Decodificar o JSON recebido do MQTT
+            data = json.loads(payload)
+            image_data = data.get('imagem', '')  # Pega o base64 do campo 'imagem'
 
             logger.info(f"[handle_image_message] Recebida imagem de {rover_id}")
 

@@ -478,24 +478,43 @@ def request_image_view(request):
             "timestamp": datetime.now().isoformat()
         }
 
-        # Conectar ao broker MQTT
-        mqtt_client = mqtt.Client()
-        mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+        try:
+            # Conectar ao broker MQTT
+            mqtt_client = mqtt.Client()
+            mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
 
-        # Publicar no tópico de comandos específico do rover
-        command_topic = f"substations/{substation_id}/rovers/{rover_id}/commands"
+            # Publicar no tópico de comandos específico do rover
+            command_topic = f"substations/{substation_id}/rovers/{rover_id}/commands"
+            
+            # Publicar com QoS 1 para garantir entrega
+            result = mqtt_client.publish(command_topic, json.dumps(command_data), qos=1)
+            mqtt_client.disconnect()
 
-        # Converter para JSON e publicar
-        mqtt_client.publish(command_topic, json.dumps(command_data), qos=1)
-        mqtt_client.disconnect()
+            # Verifica se a publicação foi bem sucedida
+            if result.rc != mqtt.MQTT_ERR_SUCCESS:
+                raise Exception(f"Falha ao publicar mensagem MQTT: {result.rc}")
 
-        logger.info(f"[request_image_view] Comando de captura enviado para rover {rover_id} na substation {substation_id}")
-        return Response({"status": "success"}, status=status.HTTP_200_OK)
+            logger.info(f"[request_image_view] Comando de captura enviado para rover {rover_id} na substation {substation_id}")
+            return Response({
+                "status": "success",
+                "message": "Comando de captura enviado com sucesso"
+            })
 
+        except Exception as e:
+            logger.error(f"Erro ao publicar no MQTT: {e}", exc_info=True)
+            return Response({
+                "error": f"Erro ao enviar comando para o rover: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except json.JSONDecodeError:
+        return Response({
+            "error": "Corpo da requisição inválido"
+        }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        logger.error(f"Erro ao solicitar imagem: {e}", exc_info=True)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        logger.error(f"Erro ao processar requisição: {e}", exc_info=True)
+        return Response({
+            "error": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 def process_mapping(request):
