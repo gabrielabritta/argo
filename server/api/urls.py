@@ -14,7 +14,9 @@ from .views import (
     list_active_rovers,
     health_check,
     request_image_view,
-    process_mapping
+    process_mapping,
+    iniciar_missao,
+    obter_mapa
 )
 
 router = DefaultRouter()
@@ -32,6 +34,8 @@ urlpatterns = [
     path('select-mission/', select_mission_view, name='select-mission'),
     path('gps-data/', GPSDataView.as_view(), name='gps-data'),
     path('active-rovers/', list_active_rovers, name='active-rovers'),
-    path('request-image/', request_image_view, name='request-image'), 
+    path('request-image/', request_image_view, name='request-image'),
     path('process-mapping/', process_mapping, name='process-mapping'),
+    path('iniciar-missao/', iniciar_missao, name='iniciar_missao'),
+    path('obter-mapa/', obter_mapa, name='obter_mapa'),
 ]

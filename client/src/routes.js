@@ -9,6 +9,11 @@ const Typography = React.lazy(() => import('./views/theme/typography/Typography'
 const SelectionView = React.lazy(() => import('./views/selection/SelectionView'))
 const SubstationInspection = React.lazy(() => import('./views/inspection/SubstationInspection'))
 const RoverInspection = React.lazy(() => import('./views/inspection/RoverInspection'))
+const CameraMonitoring = React.lazy(() => import('./views/dashboard/CameraMonitoring'))
+const LocationMonitoring = React.lazy(() => import('./views/dashboard/LocationMonitoring'))
+const Missoes = React.lazy(() => import('./views/missoes/Missoes'))
+const SubstationDetails = React.lazy(() => import('./views/inspect/SubstationDetails'))
+const RoverControl = React.lazy(() => import('./views/inspect/RoverControl'))
 
 // Base
 const Accordion = React.lazy(() => import('./views/base/accordion/Accordion'))
@@ -60,7 +65,7 @@ const Widgets = React.lazy(() => import('./views/widgets/Widgets'))
 const routes = [
   { path: '/', exact: true, name: 'Home' },
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
-  { path: '/selection', name: 'Seleção', element: SelectionView },
+  { path: '/selection', name: 'Seleção e Inspeção', element: SelectionView },
   {
     path: '/inspect/substation/:substationId',
     name: 'Subestação',
@@ -75,8 +80,8 @@ const routes = [
     path: '/inspect/rover/:roverId',
     element: RoverInspection,
   },
-  { path: '/controle/camera', name: 'Camera', element: Camera },
-  { path: '/controle/localizacao', name: 'Localização', element: Localizacao },
+  { path: '/controle/camera', name: 'Monitoramento de Câmera', element: CameraMonitoring },
+  { path: '/controle/localizacao', name: 'Monitoramento de Localização', element: LocationMonitoring },
   { path: '/controle/mapeamento', name: 'Mapeamento', element: Mapeamento },
   { path: '/theme', name: 'Theme', element: Colors, exact: true },
   { path: '/theme/colors', name: 'Colors', element: Colors },
@@ -121,6 +126,9 @@ const routes = [
   { path: '/notifications/modals', name: 'Modals', element: Modals },
   { path: '/notifications/toasts', name: 'Toasts', element: Toasts },
   { path: '/widgets', name: 'Widgets', element: Widgets },
+  { path: '/missoes', name: 'Missões', element: Missoes },
+  { path: '/inspect/substation/:substationId', name: 'Detalhes da Subestação', element: SubstationDetails },
+  { path: '/inspect/substation/:substationId/rover/:roverId', name: 'Controle do Rover', element: RoverControl },
 ]
 
 export default routes

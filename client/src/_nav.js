@@ -5,6 +5,7 @@ import {
   cilCamera,
   cilMap,
   cilSearch,
+  cilLocationPin,
 } from '@coreui/icons'
 import { CNavGroup, CNavItem } from '@coreui/react'
 
@@ -32,6 +33,12 @@ const _nav = [
     name: 'Localização',
     to: '/controle/localizacao',
     icon: <CIcon icon={cilMap} customClassName="nav-icon" />,
+  },
+  {
+    component: CNavItem,
+    name: 'Missões',
+    to: '/missoes',
+    icon: <CIcon icon={cilLocationPin} customClassName="nav-icon" />,
   },
 ]
 

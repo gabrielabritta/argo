@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 from datetime import datetime
@@ -485,7 +486,7 @@ def request_image_view(request):
 
             # Publicar no tópico de comandos específico do rover
             command_topic = f"substations/{substation_id}/rovers/{rover_id}/commands"
-            
+
             # Publicar com QoS 1 para garantir entrega
             result = mqtt_client.publish(command_topic, json.dumps(command_data), qos=1)
             mqtt_client.disconnect()
@@ -569,3 +570,48 @@ def process_mapping(request):
             {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@csrf_exempt
+def iniciar_missao(request):
+    """
+    Endpoint para iniciar uma missão com base nas coordenadas recebidas
+    """
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            x = data.get('x')
+            y = data.get('y')
+
+            # Aqui apenas logamos as coordenadas recebidas
+            logger.info(f"Missão solicitada para as coordenadas: x={x}, y={y}")
+
+            return JsonResponse({
+                'status': 'success',
+                'message': f'Missão iniciada nas coordenadas: x={x}, y={y}',
+                'coordinates': {'x': x, 'y': y}
+            })
+        except Exception as e:
+            logger.error(f"Erro ao processar solicitação de missão: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Método não permitido'
+    }, status=405)
+
+@csrf_exempt
+def obter_mapa(request):
+    """
+    Endpoint para obter informações sobre o mapa
+    """
+    return JsonResponse({
+        'status': 'success',
+        'map_info': {
+            'name': 'mapaNovo.png',
+            'width': 800,
+            'height': 600
+        }
+    })
