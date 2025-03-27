@@ -26,7 +26,13 @@ SECRET_KEY = 'django-insecure-khj0q$f)c2s6vrd!9*519r4a6tsjemmjodv9^pyvitl1d-+uu2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    'www.grinlab.site',
+    '146.235.30.249',
+    '*'
+]
 
 
 # Application definition
@@ -179,6 +185,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://192.168.100.117",
+    "http://www.grinlab.site",
+    "http://146.235.30.249",
+    "https://www.grinlab.site",
+    "https://146.235.30.249"
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
@@ -186,6 +196,10 @@ CORS_ALLOW_ALL_ORIGINS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://www.grinlab.site",
+    "http://146.235.30.249",
+    "https://www.grinlab.site",
+    "https://146.235.30.249"
 ]
 
 LOGGING = {

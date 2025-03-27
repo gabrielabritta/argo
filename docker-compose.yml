@@ -11,11 +11,25 @@ services:
       - ./client:/app
       - /app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_MQTT_URL=ws://localhost:9001
+      - VITE_API_URL=http://192.168.1.xxx:8000
+      - VITE_MQTT_URL=ws://192.168.1.xxx:9001
+      - VITE_RTMP_URL=rtmp://192.168.1.xxx:1935/live
     depends_on:
       - server
       - mqtt
+      - rtmp
+
+  rtmp:
+    build:
+      context: ./rtmp
+      dockerfile: Dockerfile
+    ports:
+      - "1935:1935"  # RTMP
+      - "8080:80"    # HLS
+    volumes:
+      - rtmp-data:/tmp/hls
+    networks:
+      - app-network
 
   server:
     build:
@@ -104,3 +118,8 @@ volumes:
   redis-data:
   pgadmin-data:
   rover-maps:
+  rtmp-data:
+
+networks:
+  app-network:
+    driver: bridge

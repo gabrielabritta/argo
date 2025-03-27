@@ -6,6 +6,7 @@ import {
   cilMap,
   cilSearch,
   cilLocationPin,
+  cilVideo,
 } from '@coreui/icons'
 import { CNavGroup, CNavItem } from '@coreui/react'
 
@@ -39,6 +40,12 @@ const _nav = [
     name: 'Missões',
     to: '/missoes',
     icon: <CIcon icon={cilLocationPin} customClassName="nav-icon" />,
+  },
+  {
+    component: CNavItem,
+    name: 'Stream 360°',
+    to: '/stream360',
+    icon: <CIcon icon={cilVideo} customClassName="nav-icon" />,
   },
 ]
 

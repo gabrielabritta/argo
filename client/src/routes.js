@@ -14,6 +14,7 @@ const LocationMonitoring = React.lazy(() => import('./views/dashboard/LocationMo
 const Missoes = React.lazy(() => import('./views/missoes/Missoes'))
 const SubstationDetails = React.lazy(() => import('./views/inspect/SubstationDetails'))
 const RoverControl = React.lazy(() => import('./views/inspect/RoverControl'))
+const Stream360 = React.lazy(() => import('./components/Stream360'))
 
 // Base
 const Accordion = React.lazy(() => import('./views/base/accordion/Accordion'))
@@ -65,6 +66,7 @@ const Widgets = React.lazy(() => import('./views/widgets/Widgets'))
 const routes = [
   { path: '/', exact: true, name: 'Home' },
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
+  { path: '/stream360', name: 'Stream 360°', element: Stream360 },
   { path: '/selection', name: 'Seleção e Inspeção', element: SelectionView },
   {
     path: '/inspect/substation/:substationId',
