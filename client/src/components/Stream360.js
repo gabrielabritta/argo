@@ -415,12 +415,12 @@ const Stream360 = () => {
         });
         
         hlsRef.current = hls;
-        
+
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
           console.log('Mídia anexada ao player HLS');
           hls.loadSource(url);
         });
-        
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           console.log('Manifesto HLS carregado com sucesso');
           
@@ -454,7 +454,7 @@ const Stream360 = () => {
           // Limpar o intervalo quando o componente for desmontado
           return () => clearInterval(intervalId);
         });
-        
+
         hls.on(Hls.Events.ERROR, (event, data) => {
           console.error('Erro HLS:', data);
           
@@ -507,7 +507,7 @@ const Stream360 = () => {
         setError('Este navegador não suporta reprodução HLS. Tente o modo iframe.');
       }
     }
-    
+
     return () => {
       // Limpeza
       if (hlsRef.current) {
@@ -642,15 +642,15 @@ const Stream360 = () => {
               <h5>Controles do Stream</h5>
               
               <div className="d-flex align-items-center gap-3 mb-3">
-                {!isStreaming ? (
-                  <CButton color="success" onClick={startStream}>
-                    Iniciar Stream
-                  </CButton>
-                ) : (
-                  <CButton color="danger" onClick={stopStream}>
-                    Parar Stream
-                  </CButton>
-                )}
+              {!isStreaming ? (
+                <CButton color="success" onClick={startStream}>
+                  Iniciar Stream
+                </CButton>
+              ) : (
+                <CButton color="danger" onClick={stopStream}>
+                  Parar Stream
+                </CButton>
+              )}
                 
                 <div>
                   <small className="text-muted d-block mb-1">Modo do Player:</small>
@@ -697,14 +697,14 @@ const Stream360 = () => {
                       style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
                     />
                   ) : (
-                    <video
-                      ref={videoRef}
-                      controls
+                  <video
+                    ref={videoRef}
+                    controls
                       playsInline
                       muted
-                      autoPlay
+                    autoPlay
                       style={{ width: '100%', height: '100%', background: '#000' }}
-                    />
+                  />
                   )}
                 </div>
                 <div className="text-center mt-2">
