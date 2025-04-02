@@ -192,10 +192,13 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_METHODS = True
+CORS_ALLOW_ALL_HEADERS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:8080",
     "http://www.grinlab.site",
     "http://146.235.30.249",
     "https://www.grinlab.site",

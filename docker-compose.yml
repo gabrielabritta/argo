@@ -11,9 +11,11 @@ services:
       - ./client:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://192.168.1.xxx:8000
-      - VITE_MQTT_URL=ws://192.168.1.xxx:9001
-      - VITE_RTMP_URL=rtmp://192.168.1.xxx:1935/live
+      - VITE_API_URL=http://localhost:8000
+      - VITE_PUBLIC_API_URL=http://localhost:8000
+      - VITE_MQTT_URL=ws://localhost:9001
+      - VITE_RTMP_URL=rtmp://localhost:1935/live
+      - VITE_HLS_URL=http://localhost:8080
     depends_on:
       - server
       - mqtt
@@ -30,6 +32,9 @@ services:
       - rtmp-data:/tmp/hls
     networks:
       - app-network
+    environment:
+      - NGINX_PORT=80
+      - RTMP_PORT=1935
 
   server:
     build:
