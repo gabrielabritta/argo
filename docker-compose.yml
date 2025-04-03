@@ -29,12 +29,11 @@ services:
       - "1935:1935"  # RTMP
       - "8080:80"    # HLS
     volumes:
+      - ./rtmp/html:/usr/share/nginx/html
       - rtmp-data:/tmp/hls
     networks:
       - app-network
-    environment:
-      - NGINX_PORT=80
-      - RTMP_PORT=1935
+    restart: unless-stopped
 
   server:
     build:

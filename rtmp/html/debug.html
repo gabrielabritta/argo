@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTMP/HLS Latency Debug</title>
+    <link href="https://vjs.zencdn.net/8.0.4/video-js.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #0d6efd;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .player-container {
+            margin: 20px 0;
+        }
+        .video-js {
+            width: 100%;
+            height: 0;
+            padding-top: 56.25%;
+            position: relative;
+        }
+        .video-js .vjs-tech {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .metrics {
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .metric-card {
+            margin-bottom: 10px;
+            border-left: 4px solid #0d6efd;
+            padding-left: 10px;
+        }
+        #latency-gauge {
+            width: 100%;
+            height: 60px;
+            margin: 10px 0;
+            background: linear-gradient(to right, green, yellow, red);
+            position: relative;
+            border-radius: 4px;
+        }
+        #latency-pointer {
+            position: absolute;
+            width: 2px;
+            height: 60px;
+            background-color: black;
+            top: 0;
+            left: 0;
+            transition: left 0.5s ease-in-out;
+        }
+        #latency-value {
+            position: absolute;
+            top: 70px;
+            left: 0;
+            transform: translateX(-50%);
+            font-weight: bold;
+        }
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            background-color: #212529;
+            color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .log-entry {
+            margin: 2px 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 2px;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .info-badge {
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RTMP/HLS Latency Debug</h1>
+        
+        <div class="player-container">
+            <video
+                id="my-player"
+                class="video-js vjs-default-skin vjs-big-play-centered"
+                controls
+                autoplay
+                muted
+                data-setup='{}'>
+                <source id="hls-source" src="/hls/stream.m3u8" type="application/x-mpegURL">
+                <p class="vjs-no-js">
+                    Para assistir este vídeo, habilite JavaScript e considere atualizar para um
+                    navegador que suporte vídeo HTML5.
+                </p>
+            </video>
+        </div>
+        
+        <div class="controls">
+            <button id="refresh-btn" class="btn btn-primary">Recarregar Player</button>
+            <button id="force-keyframe" class="btn btn-secondary">Forçar Keyframe</button>
+            <button id="clear-logs" class="btn btn-danger">Limpar Logs</button>
+            <div class="form-check form-switch ms-3 d-flex align-items-center">
+                <input class="form-check-input" type="checkbox" id="enableDebug" checked>
+                <label class="form-check-label ms-2" for="enableDebug">Debug Ativo</label>
+            </div>
+        </div>
+        
+        <div class="metrics">
+            <h4>Métricas de Latência <span class="badge bg-info info-badge" id="time-display">--:--:--</span></h4>
+            
+            <div id="latency-gauge">
+                <div id="latency-pointer"></div>
+                <span id="latency-value">0s</span>
+            </div>
+            
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Latência Total</h6>
+                        <div id="total-latency" class="fs-4">--</div>
+                        <small class="text-muted">Desde a captura até exibição</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Buffer HLS</h6>
+                        <div id="hls-buffer" class="fs-4">--</div>
+                        <small class="text-muted">Segundos de buffer carregados</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Fragmentos Carregados</h6>
+                        <div id="fragments" class="fs-4">--</div>
+                        <small class="text-muted">Quantidade de segmentos HLS</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Taxa de Bits</h6>
+                        <div id="bitrate" class="fs-4">--</div>
+                        <small class="text-muted">Kbps atual</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Tempo de Inicialização</h6>
+                        <div id="startup-time" class="fs-4">--</div>
+                        <small class="text-muted">Tempo até primeiro frame</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-card">
+                        <h6>Estado do Player</h6>
+                        <div id="player-state" class="fs-4">--</div>
+                        <small class="text-muted">Status de reprodução</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <h4>Logs de Debug</h4>
+            <div id="debug-logs" class="log-container"></div>
+        </div>
+        
+        <div class="mt-4">
+            <h5>Como testar a latência:</h5>
+            <p>Execute o FFmpeg com este comando mostrando um timestamp na tela:</p>
+            <pre class="bg-light p-2"><code>ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -preset ultrafast -tune zerolatency -vf "drawtext=text='%{localtime}':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:x=10:y=10" -b:v 2500k -bufsize 2500k -f flv rtmp://localhost:1935/live/stream</code></pre>
+            <p>Compare o timestamp no vídeo com o relógio atual para medir a latência exata.</p>
+        </div>
+    </div>
+
+    <script src="https://vjs.zencdn.net/8.0.4/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+    <script>
+        const debugLogs = document.getElementById('debug-logs');
+        const enableDebug = document.getElementById('enableDebug');
+        const timeDisplay = document.getElementById('time-display');
+        const latencyPointer = document.getElementById('latency-pointer');
+        const latencyValue = document.getElementById('latency-value');
+        const totalLatencyEl = document.getElementById('total-latency');
+        const hlsBufferEl = document.getElementById('hls-buffer');
+        const fragmentsEl = document.getElementById('fragments');
+        const bitrateEl = document.getElementById('bitrate');
+        const startupTimeEl = document.getElementById('startup-time');
+        const playerStateEl = document.getElementById('player-state');
+        
+        let startupTime = null;
+        let startTime = Date.now();
+        let fragmentCount = 0;
+        let latency = 0;
+        
+        // Log function
+        function log(message, type = 'info') {
+            if (!enableDebug.checked && type !== 'error') return;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.innerHTML = `<span style="color:#aaa;">[${timestamp}]</span> <span style="color:${type === 'error' ? '#ff6b6b' : type === 'warning' ? '#ffd166' : '#63b3ed'}">${message}</span>`;
+            
+            debugLogs.appendChild(logEntry);
+            debugLogs.scrollTop = debugLogs.scrollHeight;
+            
+            // Limit log entries
+            if (debugLogs.children.length > 100) {
+                debugLogs.removeChild(debugLogs.children[0]);
+            }
+        }
+        
+        // Update clock
+        function updateClock() {
+            const now = new Date();
+            timeDisplay.textContent = now.toLocaleTimeString();
+            requestAnimationFrame(updateClock);
+        }
+        updateClock();
+        
+        // Update latency gauge
+        function updateLatencyGauge(latencySeconds) {
+            // Map the latency to a position on the gauge (0-100%)
+            // 0s = 0%, 2s = 25%, 5s = 50%, 10s = 75%, 15s+ = 100%
+            const maxLatency = 15;
+            const percentage = Math.min(100, (latencySeconds / maxLatency) * 100);
+            
+            latencyPointer.style.left = `${percentage}%`;
+            latencyValue.style.left = `${percentage}%`;
+            latencyValue.textContent = `${latencySeconds.toFixed(2)}s`;
+            
+            // Update the color based on the latency
+            let color;
+            if (latencySeconds < 2) {
+                color = 'success';
+            } else if (latencySeconds < 5) {
+                color = 'warning';
+            } else {
+                color = 'danger';
+            }
+            
+            totalLatencyEl.innerHTML = `<span class="text-${color}">${latencySeconds.toFixed(2)}s</span>`;
+        }
+        
+        // Configure the player
+        var player = videojs('my-player', {
+            liveui: true,
+            html5: {
+                hls: {
+                    overrideNative: true
+                }
+            },
+            liveTracker: {
+                trackingThreshold: 0,
+                liveTolerance: 1
+            },
+            controlBar: {
+                pictureInPictureToggle: false
+            }
+        });
+        
+        player.ready(function() {
+            log('Player inicializado');
+            startTime = Date.now();
+            
+            // Set startup time
+            player.one('playing', function() {
+                const startup = (Date.now() - startTime) / 1000;
+                startupTimeEl.textContent = `${startup.toFixed(2)}s`;
+                log(`Primeiro frame exibido em ${startup.toFixed(2)}s`);
+            });
+            
+            // Monitor player state
+            player.on('playing', () => {
+                playerStateEl.innerHTML = '<span class="text-success">Reproduzindo</span>';
+                log('Player em estado: Reproduzindo');
+            });
+            
+            player.on('waiting', () => {
+                playerStateEl.innerHTML = '<span class="text-warning">Buffering...</span>';
+                log('Player em estado: Buffering', 'warning');
+            });
+            
+            player.on('error', () => {
+                playerStateEl.innerHTML = '<span class="text-danger">Erro!</span>';
+                log(`Erro no player: ${player.error().message}`, 'error');
+            });
+            
+            // Monitor buffer levels
+            setInterval(() => {
+                if (player.tech_ && player.tech_.hls) {
+                    // Get buffer info
+                    const bufferLength = player.buffered().length;
+                    if (bufferLength > 0) {
+                        const bufferEnd = player.buffered().end(bufferLength - 1);
+                        const currentTime = player.currentTime();
+                        const bufferAhead = bufferEnd - currentTime;
+                        
+                        hlsBufferEl.textContent = `${bufferAhead.toFixed(2)}s`;
+                        
+                        // Estimate latency
+                        // This is a rough estimation as we don't have perfect synchronization
+                        latency = player.liveTracker.liveCurrentTime() - player.currentTime() + 2;
+                        updateLatencyGauge(latency);
+                    }
+                    
+                    // Update bitrate if available
+                    try {
+                        const hls = player.tech_.hls.playlists.media();
+                        if (hls && hls.attributes && hls.attributes.BANDWIDTH) {
+                            const kbps = Math.round(hls.attributes.BANDWIDTH / 1000);
+                            bitrateEl.textContent = `${kbps} Kbps`;
+                        }
+                    } catch (e) {
+                        // Ignore
+                    }
+                }
+            }, 1000);
+        });
+        
+        // If hls.js is supported
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                maxBufferLength: 5,
+                maxMaxBufferLength: 10,
+                liveSyncDuration: 1,
+                liveMaxLatencyDuration: 5,
+                liveDurationInfinity: true,
+                debug: true
+            });
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                log(`Manifest carregado, ${data.levels.length} qualidades disponíveis`);
+            });
+            
+            hls.on(Hls.Events.LEVEL_LOADED, function(event, data) {
+                fragmentCount = data.details.fragments.length;
+                fragmentsEl.textContent = fragmentCount;
+                log(`Playlist atualizada: ${fragmentCount} fragmentos, duração: ${data.details.totalduration.toFixed(2)}s`);
+            });
+            
+            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                log(`Fragmento carregado: ${data.frag.sn}, duração: ${data.frag.duration.toFixed(2)}s`);
+            });
+            
+            // Load source directly with hls.js (for more detailed monitoring)
+            // Note: This is just for monitoring, actual playback still uses videojs
+            hls.loadSource('/hls/stream.m3u8');
+            hls.attachMedia(document.createElement('video'));
+        }
+        
+        // Button event handlers
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            log('Recarregando player...');
+            player.reset();
+            player.src({src: '/hls/stream.m3u8', type: 'application/x-mpegURL'});
+            player.load();
+            player.play();
+            startTime = Date.now();
+        });
+        
+        document.getElementById('force-keyframe').addEventListener('click', function() {
+            log('Solicitando keyframe...');
+            // This is just a visual feedback, doesn't actually force a keyframe
+            // In a real scenario, you'd need server-side support for this
+            this.disabled = true;
+            setTimeout(() => {
+                this.disabled = false;
+            }, 2000);
+        });
+        
+        document.getElementById('clear-logs').addEventListener('click', function() {
+            debugLogs.innerHTML = '';
+            log('Logs limpos');
+        });
+    </script>
+</body>
+</html>
