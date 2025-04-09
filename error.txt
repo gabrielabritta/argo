@@ -1,0 +1,5 @@
+Inicializando Panolens...
+PanolensPanoramaPlayer.js:209 Erro ao inicializar Panolens: TypeError: Cannot read properties of null (reading 'map')
+    at B.dispose (panolens.min.js:145:40)
+    at initPanolens2 (PanolensPanoramaPlayer.js:186:31)
+    at HTMLVideoElement.<anonymous> (PanolensPanoramaPlayer.js:157:13)

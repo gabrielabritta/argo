@@ -1,4 +1,5 @@
 {
     "remote.SSH.defaultForwardedPorts": [],
-    "remote.SSH.remotePlatform": "linux"
-} 
+    "remote.SSH.remotePlatform": "linux",
+    "materialkv.pythonFile": "main.py"
+}
