@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insta360 X3 - Player Interativo 360°</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0d6efd;
+        }
+        #video-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            margin-bottom: 20px;
+            overflow: hidden;
+            background-color: #000;
+            border-radius: 8px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .form-range {
+            width: 100%;
+        }
+        #video-element {
+            display: none; /* Esconder o vídeo original */
+        }
+        .status-indicator {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .loading {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .playing {
+            background-color: #198754;
+            color: white;
+        }
+        .error {
+            background-color: #dc3545;
+            color: white;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #0d6efd;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .preset-btn {
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .vr-mode-btn {
+            background-color: #6f42c1;
+            color: white;
+        }
+        .settings-panel {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-3">Insta360 X3 - Player Interativo 360°</h1>
+        
+        <div class="d-flex align-items-center mb-3">
+            <span id="status-indicator" class="status-indicator loading">Carregando...</span>
+            <span id="connection-status"></span>
+        </div>
+        
+        <div id="video-container">
+            <canvas id="panorama-canvas"></canvas>
+        </div>
+        
+        <!-- Elemento de vídeo escondido para carregar o stream HLS -->
+        <video id="video-element" crossorigin="anonymous" muted playsinline></video>
+        
+        <div class="controls">
+            <button id="play-pause" class="btn btn-primary">
+                <i class="bi bi-play-fill"></i> Reproduzir
+            </button>
+            <button id="fullscreen" class="btn btn-secondary">
+                <i class="bi bi-fullscreen"></i> Tela Cheia
+            </button>
+            <button id="restart-btn" class="btn btn-warning">
+                <i class="bi bi-arrow-repeat"></i> Reiniciar Stream
+            </button>
+            <button id="vr-mode" class="btn vr-mode-btn">
+                <i class="bi bi-phone"></i> Modo VR
+            </button>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="fov-range" class="form-label">Zoom / Campo de Visão: <span id="fov-value">90°</span></label>
+                <input type="range" class="form-range" id="fov-range" min="30" max="120" value="90">
+            </div>
+            <div class="col-md-6">
+                <h6>Visualizações Predefinidas:</h6>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="front">Frontal</button>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="left">Esquerda</button>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="right">Direita</button>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="back">Traseira</button>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="top">Topo</button>
+                <button class="btn btn-sm btn-outline-primary preset-btn" data-preset="bottom">Base</button>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h4>Como usar:</h4>
+            <ul>
+                <li><strong>Arrastar:</strong> Clique e arraste para girar a visualização 360°</li>
+                <li><strong>Zoom:</strong> Use o controle deslizante de campo de visão para zoom in/out</li>
+                <li><strong>Visualizações predefinidas:</strong> Clique nos botões para ir diretamente a visualizações específicas</li>
+                <li><strong>Modo VR:</strong> Em dispositivos móveis, ativa visualização side-by-side para óculos VR</li>
+            </ul>
+        </div>
+        
+        <div class="settings-panel">
+            <h4>Configurações Avançadas</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="stream-url" class="form-label">URL do Stream HLS</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="stream-url" value="/hls/stream.m3u8">
+                            <button class="btn btn-outline-secondary" type="button" id="apply-url">Aplicar</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="projection-type" class="form-label">Tipo de Projeção</label>
+                        <select class="form-select" id="projection-type">
+                            <option value="equirectangular">Equiretangular (padrão)</option>
+                            <option value="dual-fisheye" selected>Dual Fisheye (Insta360)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts necessários -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+    <!-- Usar a versão mais simples do Three.js com OrbitControls integrado -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.150.0/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // Esperar até que o Three.js seja carregado
+        window.onload = function() {
+            // Inicializar elementos DOM antes de qualquer coisa
+            videoElement = document.getElementById('video-element');
+            canvas = document.getElementById('panorama-canvas');
+            playPauseButton = document.getElementById('play-pause');
+            fullscreenButton = document.getElementById('fullscreen');
+            restartButton = document.getElementById('restart-btn');
+            vrModeButton = document.getElementById('vr-mode');
+            fovRange = document.getElementById('fov-range');
+            fovValue = document.getElementById('fov-value');
+            statusIndicator = document.getElementById('status-indicator');
+            connectionStatus = document.getElementById('connection-status');
+            streamUrlInput = document.getElementById('stream-url');
+            applyUrlButton = document.getElementById('apply-url');
+            projectionTypeSelect = document.getElementById('projection-type');
+            
+            if (window.THREE) {
+                // Verificar se o OrbitControls foi carregado
+                if (window.OrbitControls || window.THREE.OrbitControls) {
+                    initializePlayer();
+                } else {
+                    console.error('OrbitControls não foi carregado corretamente');
+                    updateStatus('error', 'Erro ao carregar recursos necessários');
+                }
+            } else {
+                console.error('Three.js não foi carregado corretamente');
+                updateStatus('error', 'Erro ao carregar Three.js');
+            }
+        };
+        
+        function loadScript(url, callback) {
+            const script = document.createElement('script');
+            script.src = url;
+            script.onload = callback;
+            script.onerror = function() {
+                console.error('Erro ao carregar script:', url);
+                updateStatus('error', 'Erro ao carregar recursos necessários');
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Elementos DOM
+        let videoElement, canvas, playPauseButton, fullscreenButton, 
+            restartButton, vrModeButton, fovRange, fovValue, 
+            statusIndicator, connectionStatus, streamUrlInput,
+            recoveryAttempted = false, 
+            applyUrlButton, projectionTypeSelect;
+            
+        // Variáveis Three.js
+        let scene, camera, renderer, controls;
+        let sphere, dualFisheyeMaterial, equirectMaterial;
+        let isPlaying = false;
+        let isVRMode = false;
+        let currentProjection = 'dual-fisheye';
+        let hls;
+        
+        function initializePlayer() {
+            // Elementos DOM já foram inicializados no window.onload
+            
+            // Verificar se todos os elementos foram encontrados
+            if (!videoElement || !canvas || !statusIndicator) {
+                console.error('Elementos DOM essenciais não encontrados');
+                alert('Erro ao inicializar o player. Verifique o console para mais detalhes.');
+                return;
+            }
+            
+            // Atualizar status para indicar que estamos inicializando
+            if (statusIndicator) {
+                statusIndicator.className = 'status-indicator loading';
+                statusIndicator.textContent = 'Inicializando player...';
+            }
+            
+            // Configurar Three.js para renderização 360
+            setupThreeJS();
+            
+            // Configurar HLS.js para streaming
+            setupHls();
+            
+            // Configurar event listeners
+            setupEventListeners();
+            
+            // Atualizar relógio
+            setInterval(updateClock, 1000);
+            
+            console.log('Player inicializado com sucesso');
+        }
+        
+        function setupThreeJS() {
+            // Criar cena
+            scene = new THREE.Scene();
+            
+            // Criar câmera
+            camera = new THREE.PerspectiveCamera(90, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 0.01); // Pequeno offset para evitar problemas com controles
+            
+            // Criar renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+            
+            // Configurar controles - usar a versão correta do OrbitControls
+            const OrbitControlsClass = window.THREE.OrbitControls || window.OrbitControls;
+            if (OrbitControlsClass) {
+                controls = new OrbitControlsClass(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.screenSpacePanning = false;
+                controls.minDistance = 1;
+                controls.maxDistance = 5;
+                controls.enableZoom = false; // Desabilitar zoom com mouse, usaremos o controle deslizante
+            } else {
+                console.error('OrbitControls não disponível');
+                updateStatus('error', 'Erro ao inicializar controles 3D');
+            }
+            
+            // Criar geometria da esfera
+            const geometry = new THREE.SphereGeometry(1, 64, 32);
+            geometry.scale(-1, 1, 1); // Inverter para ver de dentro da esfera
+            
+            // Criar shader para dual fisheye
+            const dualFisheyeVertexShader = `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `;
+            
+            const dualFisheyeFragmentShader = `
+                uniform sampler2D map;
+                varying vec2 vUv;
+                
+                const float PI = 3.1415926535897932384626433832795;
+                
+                void main() {
+                    // Determinar qual olho de peixe estamos processando
+                    bool isRightFisheye = vUv.x > 0.5;
+                    
+                    // Normalizar coordenadas para cada olho de peixe
+                    vec2 fisheyeUv;
+                    if (isRightFisheye) {
+                        fisheyeUv = vec2((vUv.x - 0.5) * 2.0, vUv.y);
+                    } else {
+                        fisheyeUv = vec2(vUv.x * 2.0, vUv.y);
+                    }
+                    
+                    // Converter para coordenadas polares (centro no meio do olho de peixe)
+                    fisheyeUv = fisheyeUv * 2.0 - 1.0;
+                    float radius = length(fisheyeUv);
+                    float theta = atan(fisheyeUv.y, fisheyeUv.x);
+                    
+                    // Limitar ao círculo do olho de peixe
+                    if (radius > 1.0) {
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                        return;
+                    }
+                    
+                    // Calcular coordenadas equiretangulares
+                    float phi = radius * PI / 2.0;
+                    float longitude;
+                    
+                    if (isRightFisheye) {
+                        longitude = theta + PI / 2.0;
+                    } else {
+                        longitude = theta - PI / 2.0;
+                    }
+                    
+                    // Normalizar longitude para [0, 2PI]
+                    longitude = mod(longitude + 2.0 * PI, 2.0 * PI);
+                    
+                    // Mapear para coordenadas de textura
+                    vec2 texCoord = vec2(longitude / (2.0 * PI), phi / PI);
+                    
+                    // Buscar cor da textura
+                    gl_FragColor = texture2D(map, texCoord);
+                }
+            `;
+            
+            // Criar materiais
+            const videoTexture = new THREE.VideoTexture(videoElement);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            
+            // Material para projeção equiretangular padrão
+            equirectMaterial = new THREE.MeshBasicMaterial({
+                map: videoTexture,
+                side: THREE.BackSide
+            });
+            
+            // Material para dual fisheye com shader personalizado
+            dualFisheyeMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    map: { value: videoTexture }
+                },
+                vertexShader: dualFisheyeVertexShader,
+                fragmentShader: dualFisheyeFragmentShader,
+                side: THREE.BackSide
+            });
+            
+            // Criar esfera com material inicial
+            sphere = new THREE.Mesh(geometry, dualFisheyeMaterial);
+            scene.add(sphere);
+            
+            // Configurar redimensionamento da janela
+            window.addEventListener('resize', onWindowResize, false);
+            onWindowResize();
+            
+            // Iniciar loop de animação
+            animate();
+        }
+        
+        function setupHls() {
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                // Suporte nativo para HLS (iOS Safari)
+                videoElement.src = streamUrlInput.value;
+                videoElement.addEventListener('loadedmetadata', function() {
+                    updateStatus('playing', 'Stream carregado (HLS nativo)');
+                });
+                videoElement.addEventListener('error', function() {
+                    updateStatus('error', 'Erro ao carregar stream (HLS nativo)');
+                });
+            } else if (Hls.isSupported()) {
+                // Usar HLS.js com configurações otimizadas para processamento 3D
+                hls = new Hls({
+                    debug: false,
+                    fragLoadingMaxRetry: 15,
+                    manifestLoadingMaxRetry: 15,
+                    levelLoadingMaxRetry: 15,
+                    // Configurações de buffer otimizadas para processamento 3D
+                    maxBufferLength: 30,          // Buffer maior para estabilidade
+                    maxMaxBufferLength: 60,       // Buffer máximo em segundos
+                    maxBufferSize: 60 * 1000000,  // Tamanho máximo do buffer em bytes (60MB)
+                    maxBufferHole: 0.5,           // Tolerância para buracos no buffer
+                    lowLatencyMode: false,         // Desativar modo de baixa latência para priorizar estabilidade
+                    // Configurações de fragmento para melhor estabilidade
+                    startLevel: -1,               // Auto-seleção do nível inicial
+                    abrEwmaDefaultEstimate: 500000 // Estimativa de largura de banda inicial
+                });
+                
+                hls.attachMedia(videoElement);
+                
+                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+                    updateStatus('loading', 'HLS.js inicializado, carregando stream...');
+                    hls.loadSource(streamUrlInput.value);
+                });
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    updateStatus('playing', 'Stream HLS carregado');
+                    
+                    // Auto-play quando estiver pronto
+                    videoElement.play().then(function() {
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                    }).catch(function(error) {
+                        console.error('Erro ao iniciar reprodução automática:', error);
+                        updateStatus('error', 'Clique em Reproduzir para iniciar');
+                    });
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                updateStatus('error', 'Erro de rede, tentando reconectar...');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                updateStatus('error', 'Erro de mídia, tentando recuperar...');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                updateStatus('error', 'Erro fatal no HLS.js');
+                                console.error('Erro fatal:', data);
+                                break;
+                        }
+                    }
+                });
+            } else {
+                updateStatus('error', 'Seu navegador não suporta HLS');
+            }
+            
+            // Monitorar estado da conexão
+            videoElement.addEventListener('waiting', function() {
+                connectionStatus.textContent = 'Buffering...';
+            });
+            
+            videoElement.addEventListener('playing', function() {
+                connectionStatus.textContent = '';
+            });
+        }
+        
+        function setupEventListeners() {
+            // Botão de play/pause
+            playPauseButton.addEventListener('click', function() {
+                if (isPlaying) {
+                    videoElement.pause();
+                    isPlaying = false;
+                } else {
+                    videoElement.play().then(function() {
+                        isPlaying = true;
+                    }).catch(function(error) {
+                        console.error('Erro ao reproduzir:', error);
+                    });
+                }
+                updatePlayPauseButton();
+            });
+            
+            // Botão de tela cheia
+            fullscreenButton.addEventListener('click', function() {
+                const container = document.getElementById('video-container');
+                
+                if (!document.fullscreenElement) {
+                    if (container.requestFullscreen) {
+                        container.requestFullscreen();
+                    } else if (container.webkitRequestFullscreen) {
+                        container.webkitRequestFullscreen();
+                    } else if (container.msRequestFullscreen) {
+                        container.msRequestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            });
+            
+            // Botão de reiniciar stream
+            restartButton.addEventListener('click', function() {
+                if (hls) {
+                    updateStatus('loading', 'Reiniciando stream...');
+                    hls.stopLoad();
+                    hls.startLoad();
+                    videoElement.play().then(function() {
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                    }).catch(function(error) {
+                        console.error('Erro ao reiniciar reprodução:', error);
+                    });
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoElement.load();
+                    videoElement.play().then(function() {
+                        isPlaying = true;
+                        updatePlayPauseButton();
+                    }).catch(function(error) {
+                        console.error('Erro ao reiniciar reprodução:', error);
+                    });
+                }
+            });
+            
+            // Botão de modo VR
+            vrModeButton.addEventListener('click', function() {
+                isVRMode = !isVRMode;
+                
+                if (isVRMode) {
+                    vrModeButton.classList.add('active');
+                    // Configurar visualização VR
+                    camera.aspect = 0.5;
+                    renderer.setScissorTest(true);
+                    onWindowResize();
+                } else {
+                    vrModeButton.classList.remove('active');
+                    // Restaurar visualização normal
+                    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+                    renderer.setScissorTest(false);
+                    onWindowResize();
+                }
+            });
+            
+            // Controle de FOV (campo de visão)
+            fovRange.addEventListener('input', function() {
+                const fov = parseInt(fovRange.value);
+                fovValue.textContent = fov + '°';
+                camera.fov = fov;
+                camera.updateProjectionMatrix();
+            });
+            
+            // Botões de preset
+            const presetButtons = document.querySelectorAll('.preset-btn');
+            presetButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const preset = this.getAttribute('data-preset');
+                    applyPreset(preset);
+                });
+            });
+            
+            // Botão de aplicar URL
+            applyUrlButton.addEventListener('click', function() {
+                const newUrl = streamUrlInput.value;
+                
+                if (hls) {
+                    updateStatus('loading', 'Carregando nova URL...');
+                    hls.stopLoad();
+                    hls.loadSource(newUrl);
+                    hls.startLoad();
+                } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                    videoElement.src = newUrl;
+                    videoElement.load();
+                }
+            });
+            
+            // Seletor de tipo de projeção
+            projectionTypeSelect.addEventListener('change', function() {
+                const projectionType = projectionTypeSelect.value;
+                changeProjection(projectionType);
+            });
+        }
+        
+        function updateStatus(type, message) {
+            if (statusIndicator) {
+                statusIndicator.className = 'status-indicator ' + type;
+                statusIndicator.textContent = message;
+                console.log('Status atualizado:', type, message);
+            } else {
+                console.warn('statusIndicator não encontrado ao tentar atualizar status:', type, message);
+            }
+        }
+        
+        function updatePlayPauseButton() {
+            if (isPlaying) {
+                playPauseButton.innerHTML = '<i class="bi bi-pause-fill"></i> Pausar';
+            } else {
+                playPauseButton.innerHTML = '<i class="bi bi-play-fill"></i> Reproduzir';
+            }
+        }
+        
+        function onWindowResize() {
+            const container = document.getElementById('video-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            if (isVRMode) {
+                // Modo VR: dividir a tela em dois
+                camera.aspect = 0.5;
+                renderer.setSize(width, height);
+            } else {
+                // Modo normal
+                camera.aspect = width / height;
+                renderer.setSize(width, height);
+            }
+            
+            camera.updateProjectionMatrix();
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            render();
+        }
+        
+        function render() {
+            if (!isInitialized) return;
+            
+            // Verificar se o vídeo está pronto e atualizar a textura
+            if (videoElement && videoElement.readyState >= 2) { // HAVE_CURRENT_DATA
+                // Atualizar textura apenas se o vídeo estiver pronto
+                if (videoTexture) {
+                    videoTexture.needsUpdate = true;
+                    
+                    // Verificar se o vídeo está em pausa mas deveria estar reproduzindo
+                    if (isPlaying && videoElement.paused) {
+                        console.log('Vídeo pausado inesperadamente, tentando retomar...');
+                        videoElement.play().catch(function(error) {
+                            console.error('Erro ao retomar vídeo:', error);
+                        });
+                    }
+                }
+            }
+            
+            // Verificar se todos os componentes estão disponíveis antes de renderizar
+            if (!controls || !renderer || !scene || !camera) {
+                console.warn('Componentes de renderização não estão prontos');
+                return;
+            }
+            
+            try {
+                // Atualizar controles
+                controls.update();
+                
+                if (isVRMode) {
+                    // Renderização para VR (dividir tela)
+                    const size = renderer.getSize(new THREE.Vector2());
+                    const width = size.x;
+                    const height = size.y;
+                    
+                    // Metade esquerda
+                    renderer.setViewport(0, 0, width / 2, height);
+                    renderer.setScissor(0, 0, width / 2, height);
+                    renderer.setScissorTest(true);
+                    renderer.render(scene, camera);
+                    
+                    // Metade direita
+                    renderer.setViewport(width / 2, 0, width / 2, height);
+                    renderer.setScissor(width / 2, 0, width / 2, height);
+                    renderer.render(scene, camera);
+                } else {
+                    // Renderização normal
+                    renderer.render(scene, camera);
+                }
+            } catch (error) {
+                console.error('Erro durante a renderização 3D:', error);
+                // Tentar recuperar de erros de renderização
+                if (!recoveryAttempted) {
+                    recoveryAttempted = true;
+                    console.log('Tentando recuperar da falha de renderização...');
+                    setTimeout(function() {
+                        recoveryAttempted = false;
+                        // Reiniciar componentes de renderização se necessário
+                        if (setupThreeJS) setupThreeJS();
+                    }, 2000);
+                }
+            }
+        }
+        
+        function applyPreset(preset) {
+            switch(preset) {
+                case 'front':
+                    controls.reset();
+                    break;
+                case 'left':
+                    controls.reset();
+                    camera.rotateY(Math.PI / 2);
+                    break;
+                case 'right':
+                    controls.reset();
+                    camera.rotateY(-Math.PI / 2);
+                    break;
+                case 'back':
+                    controls.reset();
+                    camera.rotateY(Math.PI);
+                    break;
+                case 'top':
+                    controls.reset();
+                    camera.rotateX(-Math.PI / 2);
+                    break;
+                case 'bottom':
+                    controls.reset();
+                    camera.rotateX(Math.PI / 2);
+                    break;
+            }
+        }
+        
+        function changeProjection(type) {
+            currentProjection = type;
+            
+            if (type === 'equirectangular') {
+                sphere.material = equirectMaterial;
+            } else if (type === 'dual-fisheye') {
+                sphere.material = dualFisheyeMaterial;
+            }
+        }
+    </script>
+</body>
+</html>

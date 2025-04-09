@@ -44,7 +44,8 @@
     "react-router-dom": "^6.23.1",
     "react-select": "^5.8.0",
     "redux": "5.0.1",
-    "simplebar-react": "^3.2.5"
+    "simplebar-react": "^3.2.5",
+    "three": "^0.162.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
