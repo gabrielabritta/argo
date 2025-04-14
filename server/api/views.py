@@ -473,10 +473,9 @@ def request_image_view(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Montar a mensagem de comando
+        # Montar a mensagem de comando com zoom
         command_data = {
-            "command": "capture_image",
-            "timestamp": datetime.now().isoformat()
+            "zoom": body.get('zoom', 1.0)
         }
 
         try:

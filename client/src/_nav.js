@@ -43,7 +43,7 @@ const _nav = [
   },
   {
     component: CNavItem,
-    name: 'Stream 360°',
+    name: 'Stream 360° RTMP',
     to: '/stream360',
     icon: <CIcon icon={cilVideo} customClassName="nav-icon" />,
   },
