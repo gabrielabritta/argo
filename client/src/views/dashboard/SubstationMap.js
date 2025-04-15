@@ -1,10 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { CCard, CCardBody, CCardHeader, CSpinner, CButton, CTooltip } from '@coreui/react'
-import CIcon from '@coreui/icons-react'
-import { cilCheckCircle, cilWarning, cilLocationPin } from '@coreui/icons'
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CCard, CCardBody, CCardHeader, CSpinner, CButton, CTooltip } from '@coreui/react';
+import CIcon from '@coreui/icons-react';
+import { cilCheckCircle, cilWarning, cilLocationPin } from '@coreui/icons';
+import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
-// Estilo para o mapa simulado
+// Corrigir o problema de ícones do Leaflet
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// Estilo para o mapa
 const mapStyle = {
   height: '600px',
   width: '100%',
@@ -12,253 +19,104 @@ const mapStyle = {
   boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
   position: 'relative',
   overflow: 'hidden',
-  backgroundColor: '#f0f8ff',
-}
+};
 
+// Configuração para ícone default do Leaflet
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Componente para criar ícones customizados por status
+const createStatusIcon = (status) => {
+  const color = status === 'operational' ? '#2eb85c' : 
+                status === 'maintenance' ? '#f9b115' : '#e55353';
+                
+  return L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div style="background-color: ${color}; width: 36px; height: 36px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+};
+
+// Componente principal
 const SubstationMap = () => {
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [substations, setSubstations] = useState([])
-  const [hoveredState, setHoveredState] = useState(null)
-  const [svgContent, setSvgContent] = useState('')
-  const mapContainerRef = useRef(null)
-  const [mapDimensions, setMapDimensions] = useState({ width: 0, height: 0 })
-  const svgRef = useRef(null)
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [substations, setSubstations] = useState([]);
+  const [hoveredState, setHoveredState] = useState(null);
 
-  // Função para converter coordenadas geográficas para coordenadas SVG
-  const geoToSvgCoordinates = (latitude, longitude, svgElement) => {
-    if (!svgElement) return { x: 0, y: 0 };
+  // Define os limites do mapa do Brasil
+  const brazilBounds = [
+    [-33.743888, -74.008595], // Sudoeste (lat, lon)
+    [5.275696, -34.789914],   // Nordeste (lat, lon)
+  ];
 
-    const SVG_BRAZIL = {
-      MIN_LON: -74.0,
-      MAX_LON: -34.0,
-      MIN_LAT: -33.0,
-      MAX_LAT: 5.0,
-      ADJUST_X: -15,
-      ADJUST_Y: -10
-    };
-
-    const viewBox = svgElement.viewBox.baseVal;
-    const svgWidth = viewBox.width;
-    const svgHeight = viewBox.height;
-
-    // Calcular proporção X (longitude)
-    const proportionX = (longitude - SVG_BRAZIL.MIN_LON) / (SVG_BRAZIL.MAX_LON - SVG_BRAZIL.MIN_LON);
-    const x = viewBox.x + proportionX * svgWidth + SVG_BRAZIL.ADJUST_X;
-
-    // Calcular proporção Y (latitude, invertida)
-    const proportionY = 1 - ((latitude - SVG_BRAZIL.MIN_LAT) / (SVG_BRAZIL.MAX_LAT - SVG_BRAZIL.MIN_LAT));
-    const y = viewBox.y + proportionY * svgHeight + SVG_BRAZIL.ADJUST_Y;
-
-    return { x, y };
-  };
-
-  // Função para posicionar os marcadores de subestação
-  const positionSubstationMarkers = () => {
-    const svgElement = document.getElementById('brazil-map');
-    if (!svgElement) return;
-
-    svgRef.current = svgElement;
-    const viewBox = svgElement.viewBox.baseVal;
-
-    // Usar requestAnimationFrame para garantir que o posicionamento aconteça após o layout
-    requestAnimationFrame(() => {
-      setSubstations(prev =>
-        prev.map(sub => {
-          let percentX, percentY;
-
-          // Posicionamento fixo para Parnaíba
-          if (sub.name === 'Argo Parnaíba') {
-            // Posicionar relativo ao estado do Piauí
-            const piauiElement = document.querySelector('#brazil-map path[title="Piauí"], #brazil-map path#BR-PI');
-
-            if (piauiElement) {
-              // Usar o centro do estado de Piauí como referência
-              const bbox = piauiElement.getBBox();
-              const centerX = bbox.x + bbox.width * 0.35; // 35% da largura para a direita
-              const centerY = bbox.y + bbox.height * 0.3; // 30% da altura para baixo
-
-              percentX = ((centerX - viewBox.x) / viewBox.width) * 100;
-              percentY = ((centerY - viewBox.y) / viewBox.height) * 100;
-            } else {
-              // Fallback se não encontrar o elemento do Piauí
-              percentX = 32;
-              percentY = 28;
-            }
-          } else {
-            // Cálculo normal para outras subestações
-            const { latitude, longitude } = sub.geoCoordinates;
-            const { x, y } = geoToSvgCoordinates(latitude, longitude, svgElement);
-            percentX = ((x - viewBox.x) / viewBox.width) * 100;
-            percentY = ((y - viewBox.y) / viewBox.height) * 100;
-          }
-
-          console.log(`Substation ${sub.name}: left=${percentX}%, top=${percentY}%`);
-
-          return {
-            ...sub,
-            location: {
-              left: percentX + '%',
-              top: percentY + '%'
-            }
-          };
-        })
-      );
-    });
-  };
-
-  // Carregar SVG e subestações ao montar
+  // Carregar dados das subestações
   useEffect(() => {
-    // Carregar o SVG como texto
-    const fetchSvg = async () => {
-      try {
-        const response = await fetch('/src/assets/images/brazil.svg')
-        const svgText = await response.text()
-
-        // Processar o SVG para adicionar ID e estilos
-        const processedSvg = svgText
-          .replace(/<svg/, '<svg id="brazil-map"')
-          .replace(/<path/g, '<path style="fill:#2986cc;stroke:#ffffff;stroke-width:0.5"')
-
-        setSvgContent(processedSvg)
-      } catch (error) {
-        console.error('Erro ao carregar SVG:', error)
-      }
-    }
-
-    fetchSvg()
-
-    // Simular carregamento de dados de subestações
     const fetchSubstations = async () => {
       try {
-        // Dados da subestação com coordenadas geográficas
+        // Mesmos dados do seu código original
         const mockData = [
           {
             id: 1,
             name: 'Argo Parnaíba',
-            location: { top: '50%', left: '50%' }, // Posição temporária
-            geoCoordinates: {
-              latitude: -3.1232281049031023 - 0.5, // Ajuste da latitude (mais para cima)
-              longitude: -41.76591793320992 - 1.5  // Ajuste da longitude (mais para a esquerda)
-            },
+            // Coordenadas precisas sem necessidade de ajustes
+            coordinates: [-3.123201322652942, -41.765692627657174],
             status: 'operational',
             voltage: '500kV',
             rovers: 3,
             lastInspection: '2024-10-15',
             state: 'PI',
           },
-        ]
+        ];
 
-        setSubstations(mockData)
-        setLoading(false)
+        setSubstations(mockData);
+        setLoading(false);
       } catch (error) {
-        console.error('Erro ao carregar subestações:', error)
-        setLoading(false)
+        console.error('Erro ao carregar subestações:', error);
+        setLoading(false);
       }
-    }
+    };
 
-    fetchSubstations()
-
-    // Atualiza dimensões do container do mapa
-    const updateMapDimensions = () => {
-      if (mapContainerRef.current) {
-        setMapDimensions({
-          width: mapContainerRef.current.offsetWidth,
-          height: mapContainerRef.current.offsetHeight,
-        })
-      }
-    }
-
-    updateMapDimensions()
-    window.addEventListener('resize', updateMapDimensions)
-
-    return () => {
-      window.removeEventListener('resize', updateMapDimensions)
-    }
-  }, [])
-
-  // Após carregar o SVG no estado, adiciona interatividade e posiciona as subestações
-  useEffect(() => {
-    if (svgContent) {
-      const svgContainer = document.getElementById('svg-container')
-      if (svgContainer) {
-        setTimeout(() => {
-          const paths = document.querySelectorAll('#brazil-map path')
-          paths.forEach((path) => {
-            // Eventos de mouse (hover)
-            path.addEventListener('mouseenter', () => {
-              path.style.fill = '#1c5a9c'
-              if (path.getAttribute('title')) {
-                setHoveredState(path.getAttribute('title'))
-              }
-            })
-            path.addEventListener('mouseleave', () => {
-              path.style.fill = '#2986cc'
-              setHoveredState(null)
-            })
-
-            // Destacar o estado do Piauí ao carregar
-            if (
-              path.getAttribute('title') === 'Piauí' ||
-              path.getAttribute('id') === 'BR-PI'
-            ) {
-              path.style.fill = '#1c5a9c'
-              setTimeout(() => {
-                path.style.fill = '#2986cc'
-              }, 1500)
-            }
-          })
-
-          // Posicionar as subestações após carregar o SVG
-          setTimeout(positionSubstationMarkers, 200)
-        }, 100)
-      }
-    }
-  }, [svgContent])
-
-  // Recalcular posição quando as dimensões do container mudarem
-  useEffect(() => {
-    if (svgContent && substations.length > 0) {
-      // Adicionar um pequeno atraso para garantir que o SVG foi renderizado
-      const timer = setTimeout(() => {
-        positionSubstationMarkers();
-      }, 300);
-
-      return () => clearTimeout(timer);
-    }
-  }, [mapDimensions, substations.length, svgContent]);
+    fetchSubstations();
+  }, []);
 
   const handleSubstationClick = (substationId) => {
-    navigate(`/inspect/substation/${substationId}`)
-  }
+    navigate(`/inspect/substation/${substationId}`);
+  };
 
-  // Determina o ícone com base no status
+  // Determina o ícone com base no status (mantendo a consistência com o original)
   const getStatusIcon = (status) => {
     switch (status) {
       case 'operational':
-        return <CIcon icon={cilCheckCircle} className="text-white" />
+        return <CIcon icon={cilCheckCircle} className="text-white" />;
       case 'maintenance':
-        return <CIcon icon={cilWarning} className="text-white" />
+        return <CIcon icon={cilWarning} className="text-white" />;
       case 'alert':
-        return <CIcon icon={cilWarning} className="text-white" />
+        return <CIcon icon={cilWarning} className="text-white" />;
       default:
-        return <CIcon icon={cilLocationPin} className="text-white" />
+        return <CIcon icon={cilLocationPin} className="text-white" />;
     }
-  }
+  };
 
-  // Determina a cor do marcador com base no status
+  // Determina a cor do marcador com base no status (mantendo a consistência)
   const getStatusColor = (status) => {
     switch (status) {
       case 'operational':
-        return 'success'
+        return 'success';
       case 'maintenance':
-        return 'warning'
+        return 'warning';
       case 'alert':
-        return 'danger'
+        return 'danger';
       default:
-        return 'primary'
+        return 'primary';
     }
-  }
+  };
 
   return (
     <CCard className="mb-4">
@@ -273,105 +131,78 @@ const SubstationMap = () => {
             <CSpinner color="primary" />
           </div>
         ) : (
-          <div style={mapStyle} ref={mapContainerRef}>
-            {/* Renderização do SVG com configuração importante de preserveAspectRatio */}
-            <div
-              id="svg-container"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                zIndex: 0,
-                overflow: 'hidden' // Impedir que o SVG vaze para fora do container
-              }}
-              dangerouslySetInnerHTML={{
-                __html: svgContent.replace('<svg', '<svg preserveAspectRatio="xMidYMid meet" width="100%" height="100%"')
-              }}
-            />
-
-            {substations.map((substation) => {
-              const { top, left } = substation.location;
-
-              return (
-                <div
+          <div style={mapStyle}>
+            <MapContainer 
+              bounds={brazilBounds}
+              style={{ height: '100%', width: '100%' }}
+              zoom={5}
+              minZoom={4}
+              maxZoom={10}
+              scrollWheelZoom={true}
+            >
+              {/* Mapa base */}
+              <TileLayer
+                attribution='&copy; <a href="[https://www.openstreetmap.org/copyright">OpenStreetMap</a>](https://www.openstreetmap.org/copyright">OpenStreetMap</a>) contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              
+              {/* Overlay SVG - Brasil */}
+              <ImageOverlay
+                url="/src/assets/images/brazil.svg"
+                bounds={brazilBounds}
+                opacity={0.5}
+              />
+              
+              {/* Marcadores das subestações */}
+              {substations.map((substation) => (
+                <Marker 
                   key={substation.id}
-                  style={{
-                    position: 'absolute',
-                    top: top,
-                    left: left,
-                    transform: 'translate(-50%, -50%)',
-                    zIndex: 1000,
+                  position={substation.coordinates}
+                  icon={createStatusIcon(substation.status)}
+                  eventHandlers={{
+                    click: () => handleSubstationClick(substation.id)
                   }}
                 >
-                  <CTooltip content={substation.name}>
-                    <div
-                      className={`bg-${getStatusColor(substation.status)} rounded-circle d-flex justify-content-center align-items-center`}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        cursor: 'pointer',
-                        border: '3px solid white',
-                        boxShadow: '0 0 8px rgba(0,0,0,0.5)',
-                        animation: 'pulse 2s infinite',
-                      }}
-                      onClick={() => handleSubstationClick(substation.id)}
-                    >
-                      {getStatusIcon(substation.status)}
+                  <Popup>
+                    <div style={{ width: '250px' }}>
+                      <h5 className="text-primary">{substation.name}</h5>
+                      <p>
+                        <strong>Status:</strong>{' '}
+                        <span className={`text-${getStatusColor(substation.status)}`}>
+                          {substation.status === 'operational'
+                            ? 'Operacional'
+                            : substation.status === 'maintenance'
+                            ? 'Em Manutenção'
+                            : 'Alerta'}
+                        </span>
+                      </p>
+                      <p>
+                        <strong>Estado:</strong> {substation.state}
+                      </p>
+                      <p>
+                        <strong>Tensão:</strong> {substation.voltage}
+                      </p>
+                      <p>
+                        <strong>Rovers:</strong> {substation.rovers}
+                      </p>
+                      <p>
+                        <strong>Última Inspeção:</strong> {substation.lastInspection}
+                      </p>
+                      <CButton
+                        color="primary"
+                        size="sm"
+                        className="w-100"
+                        onClick={() => handleSubstationClick(substation.id)}
+                      >
+                        Inspecionar
+                      </CButton>
                     </div>
-                  </CTooltip>
-                  <div
-                    className="substation-popup bg-white p-3 rounded shadow"
-                    style={{
-                      position: 'absolute',
-                      top: '45px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '250px',
-                      display: 'none',
-                      zIndex: 1001,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.display = 'block')}
-                    onMouseLeave={(e) => (e.currentTarget.style.display = 'none')}
-                  >
-                    <h5 className="text-primary">{substation.name}</h5>
-                    <p>
-                      <strong>Status:</strong>{' '}
-                      <span className={`text-${getStatusColor(substation.status)}`}>
-                        {substation.status === 'operational'
-                          ? 'Operacional'
-                          : substation.status === 'maintenance'
-                          ? 'Em Manutenção'
-                          : 'Alerta'}
-                      </span>
-                    </p>
-                    <p>
-                      <strong>Estado:</strong> {substation.state}
-                    </p>
-                    <p>
-                      <strong>Tensão:</strong> {substation.voltage}
-                    </p>
-                    <p>
-                      <strong>Rovers:</strong> {substation.rovers}
-                    </p>
-                    <p>
-                      <strong>Última Inspeção:</strong> {substation.lastInspection}
-                    </p>
-                    <CButton
-                      color="primary"
-                      size="sm"
-                      className="w-100"
-                      onClick={() => handleSubstationClick(substation.id)}
-                    >
-                      Inspecionar
-                    </CButton>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Legenda de cores */}
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+            
+            {/* Legenda de cores - mantida igual ao original */}
             <div
               className="position-absolute bottom-0 start-0 p-2 bg-white bg-opacity-75 rounded m-2"
               style={{ zIndex: 1000 }}
@@ -398,31 +229,11 @@ const SubstationMap = () => {
                 <small>Alerta</small>
               </div>
             </div>
-
-            {/* Animação de "pulse" para o marcador */}
-            <style>
-              {`
-                @keyframes pulse {
-                  0% {
-                    transform: scale(1);
-                    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
-                  }
-                  70% {
-                    transform: scale(1.1);
-                    box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
-                  }
-                  100% {
-                    transform: scale(1);
-                    box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
-                  }
-                }
-              `}
-            </style>
           </div>
         )}
       </CCardBody>
     </CCard>
-  )
-}
+  );
+};
 
-export default SubstationMap
+export default SubstationMap;
