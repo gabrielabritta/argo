@@ -4,3 +4,6 @@
 [submodule "360-Viwer"]
 	path = 360-Viwer
 	url = https://github.com/livebloggerofficial/360-Degree-Image-Viewer.git
+[submodule "360-Viewer"]
+	path = 360-Viewer
+	url = https://github.com/livebloggerofficial/360-Degree-Image-Viewer
