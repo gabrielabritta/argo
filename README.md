@@ -2,79 +2,54 @@
 
 Este repositório contém o código do projeto Argo, que inclui o backend em Django e o frontend usando CoreUI e Leaflet.js.
 
-# Backend
+## Começando
 
-## 1. Criação do Ambiente Virtual
-
-No diretório server, crie um ambiente virtual para isolar as dependências do projeto:
+Clone o repositório:
 
 ```bash
-python -m venv myenv
+git clone https://github.com/gabrielabritta/argo.git
+cd argo
 ```
 
-Ative o ambiente virtual:
+## Pré-requisitos
 
-myenv\Scripts\activate
+### 1. Instalação do Docker
 
-Linux/MacOS:
+#### Windows
+1. Baixe o Docker Desktop para Windows no [site oficial do Docker](https://docs.docker.com/desktop/install/windows-install/)
+2. Execute o instalador e siga as instruções
+3. Inicie o Docker Desktop após a instalação
+
+#### Linux
+1. Siga o tutorial oficial do Docker para sua distribuição:
+   - [Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+   - [Debian](https://docs.docker.com/engine/install/debian/)
+   - [Fedora](https://docs.docker.com/engine/install/fedora/)
+   - [CentOS](https://docs.docker.com/engine/install/centos/)
+
+### 2. Atualização dos Submódulos Git
+
+Após clonar o repositório, execute os seguintes comandos para inicializar e atualizar os submódulos:
 
 ```bash
-    source myenv/bin/activate
+git submodule init
+git submodule update --recursive
 ```
 
-## 2. Instalação das Dependências
+## Executando o Projeto
 
-Com o ambiente virtual ativado, instale as dependências necessárias listadas no requirements.txt (se não houver um arquivo requirements.txt, você pode criar um com as dependências abaixo):
+Para iniciar todos os serviços (backend e frontend), execute:
 
 ```bash
-pip install -r requirements.txt
+docker compose up --build
 ```
 
-Dependências principais:
+Após a inicialização:
+- Frontend estará disponível em: http://localhost:3000
+- Backend estará disponível em: http://localhost:8000
 
-    asgiref==3.8.1
-    certifi==2024.7.4
-    charset-normalizer==3.3.2
-    Django==5.1
-    django-cors-headers==4.4.0
-    djangorestframework==3.15.2
-    idna==3.8
-    requests==2.32.3
-    sqlparse==0.5.1
-    tzdata==2024.1
-    urllib3==2.2.2
-
-## 3. Migrações e Inicialização do Servidor
-
-Após instalar as dependências, você precisará aplicar as migrações e iniciar o servidor Django:
+Para parar os serviços, pressione `Ctrl+C` ou execute em outro terminal:
 
 ```bash
-python manage.py migrate
-python manage.py runserver
+docker compose down
 ```
-
-### O servidor estará disponível em http://127.0.0.1:8000/.
-
-# Frontend
-## 1. Instalação das Dependências
-
-No diretório client, execute os seguintes comandos para instalar as dependências do projeto:
-
-```bash
-npm install
-```
-
-Certifique-se de que as seguintes bibliotecas estão incluídas:
-
-    Leaflet.js para mapas interativos
-    CoreUI para componentes de interface
-    CoreUI Icons para ícones
-
-## 2. Inicialização do Frontend
-
-Após a instalação das dependências, inicie o frontend com:
-
-```bash
-npm start
-```
-### O frontend estará disponível em http://localhost:3000/.
