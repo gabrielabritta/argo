@@ -1,0 +1,3 @@
+[submodule "RoverModel"]
+	path = RoverModel
+	url = https://github.com/lmhonorio/RoverModel
