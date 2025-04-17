@@ -614,3 +614,110 @@ def obter_mapa(request):
             'height': 600
         }
     })
+
+@api_view(['POST'])
+def configurar_insta360(request):
+    """
+    Endpoint para configurar a câmera Insta360 de um rover
+    
+    Envia comandos de configuração via MQTT para o rover
+    Tópico: /substations/{substation_id}/rovers/{rover_id}/insta/config
+    
+    Payload esperado:
+    {
+        "rover_id": "ROVER001",
+        "substation_id": "SUB001", (opcional, será buscado se não for fornecido)
+        "ssid": "nome_da_rede_wifi", (opcional)
+        "password": "senha_wifi", (opcional, requerido se ssid for fornecido)
+        "rtmp": "url_rtmp" (opcional)
+    }
+    
+    Validações:
+    - Pelo menos um dos campos ssid, password ou rtmp deve ser fornecido
+    - Se ssid for fornecido, password também deve ser fornecido
+    - Se password for fornecido, ssid também deve ser fornecido
+    
+    Resposta:
+    - status: 200 e message: "Configuração enviada com sucesso" se o comando for enviado
+    - Erro 400 se a requisição for inválida
+    - Erro 404 se o rover não for encontrado
+    - Erro 500 se houver erro ao enviar comando
+    """
+    try:
+        # Extrair parâmetros da requisição
+        rover_id = request.data.get('rover_id')
+        substation_id = request.data.get('substation_id')
+        ssid = request.data.get('ssid')
+        password = request.data.get('password')
+        rtmp_url = request.data.get('rtmp')
+        
+        # Validar rover_id
+        if not rover_id:
+            return Response({'error': 'rover_id é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validar que pelo menos um campo de configuração está presente
+        if not any([ssid, password, rtmp_url]):
+            return Response(
+                {'error': 'Pelo menos um dos campos: ssid, password ou rtmp deve ser fornecido'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar dependência entre ssid e password
+        if (ssid and not password) or (password and not ssid):
+            return Response(
+                {'error': 'Se ssid for fornecido, password também deve ser fornecido e vice-versa'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar o rover pelo ID
+        try:
+            rover = Rover.objects.get(identifier=rover_id)
+            
+            # Se substation_id não foi fornecido, usar o do rover
+            if not substation_id:
+                substation_id = rover.substation.identifier
+                
+        except Rover.DoesNotExist:
+            return Response(
+                {'error': f'Rover com ID {rover_id} não encontrado'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Montar o payload para o MQTT
+        payload = {}
+        if ssid:
+            payload['ssid'] = ssid
+        if password:
+            payload['password'] = password
+        if rtmp_url:
+            payload['rtmp'] = rtmp_url
+        
+        # Definir o tópico MQTT
+        topic = f'substations/{substation_id}/rovers/{rover_id}/insta/config'
+        
+        # Enviar comando via MQTT
+        try:
+            mqtt_client = mqtt.Client()
+            mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+            mqtt_client.publish(topic, json.dumps(payload))
+            mqtt_client.disconnect()
+            
+            return Response({
+                'message': 'Configuração enviada com sucesso',
+                'topic': topic,
+                'payload': payload
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Erro ao enviar configuração MQTT: {str(e)}")
+            return Response(
+                {'error': f'Erro ao enviar configuração: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+    except Exception as e:
+        logger.error(f"Erro ao processar requisição de configuração Insta360: {str(e)}")
+        return Response(
+            {'error': f'Erro interno: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

@@ -1,0 +1,154 @@
+{% extends 'qr_code/base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1 class="page-header">Rover QR Codes</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRoverModal">
+            <i class="bi bi-plus-circle"></i> Adicionar novo rover
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    {% if rovers %}
+        {% for rover in rovers %}
+        <div class="col-md-4 mb-4">
+            <div class="card rover-card" onclick="window.location.href='/qr-code/rover/{{ rover.rover_id }}/'">
+                <div class="rover-header">
+                    <h5 class="card-title mb-0">Rover ID: {{ rover.rover_id }}</h5>
+                </div>
+                <div class="rover-info">
+                    <p class="card-text">Subestação ID: {{ rover.substation_id }}</p>
+                    <img src="data:image/png;base64,{{ rover.qr_code }}" class="img-fluid" alt="QR Code" style="max-width: 150px; margin: 0 auto; display: block;">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                Nenhum rover cadastrado. Clique em "Adicionar novo rover" para começar.
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Add Rover Modal -->
+<div class="modal fade" id="addRoverModal" tabindex="-1" aria-labelledby="addRoverModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addRoverModalLabel">Adicionar Novo Rover</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="errorMessage" class="alert alert-danger" style="display: none;"></div>
+                <div class="mb-3">
+                    <label for="roverId" class="form-label">ID do Rover</label>
+                    <input type="text" class="form-control" id="roverId" required>
+                </div>
+                <div class="mb-3">
+                    <label for="substationId" class="form-label">ID da Subestação</label>
+                    <input type="text" class="form-control" id="substationId" required>
+                </div>
+                <div id="qrCodeResult" class="text-center mt-4" style="display: none;">
+                    <h5>QR Code Gerado:</h5>
+                    <img id="qrCodeImage" src="" class="img-fluid mt-2" alt="QR Code">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" id="saveRoverBtn">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    // Store CSRF token from the template
+    const csrfToken = "{{ csrf_token }}";
+    
+    document.getElementById('saveRoverBtn').addEventListener('click', function() {
+        const roverId = document.getElementById('roverId').value.trim();
+        const substationId = document.getElementById('substationId').value.trim();
+        const errorMessage = document.getElementById('errorMessage');
+        
+        // Validate inputs
+        if (!roverId || !substationId) {
+            errorMessage.textContent = 'Por favor, preencha todos os campos.';
+            errorMessage.style.display = 'block';
+            return;
+        }
+        
+        // Show loading spinner
+        showLoading();
+        
+        // First check if rover ID already exists
+        fetch('/qr-code/check-id/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                rover_id: roverId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.exists) {
+                hideLoading();
+                errorMessage.textContent = 'Este ID de rover já existe.';
+                errorMessage.style.display = 'block';
+            } else {
+                // If ID doesn't exist, proceed with saving
+                fetch('/qr-code/add/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        rover_id: roverId,
+                        substation_id: substationId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    hideLoading();
+                    if (data.status === 'success') {
+                        // Show the QR code
+                        document.getElementById('qrCodeImage').src = 'data:image/png;base64,' + data.qr_code;
+                        document.getElementById('qrCodeResult').style.display = 'block';
+                        
+                        // Set a timeout to refresh the page
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 5000);
+                    } else {
+                        errorMessage.textContent = data.message || 'Ocorreu um erro ao salvar o rover.';
+                        errorMessage.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    hideLoading();
+                    errorMessage.textContent = 'Erro ao comunicar com o servidor.';
+                    errorMessage.style.display = 'block';
+                    console.error('Error:', error);
+                });
+            }
+        })
+        .catch(error => {
+            hideLoading();
+            errorMessage.textContent = 'Erro ao comunicar com o servidor.';
+            errorMessage.style.display = 'block';
+            console.error('Error:', error);
+        });
+    });
+</script>
+{% endblock %}

@@ -22,6 +22,7 @@ import {
 // Importar os componentes existentes
 import CameraMonitoring from '../dashboard/CameraMonitoring'
 import LocationMonitoring from '../dashboard/LocationMonitoring'
+import RTMPStream360 from '../../components/RTMPStream360'
 
 const RoverInspection = () => {
   const { substationId, roverId } = useParams()
@@ -117,6 +118,15 @@ const RoverInspection = () => {
             </CNavItem>
             <CNavItem>
               <CNavLink
+                active={activeTab === 'camera360'}
+                onClick={() => setActiveTab('camera360')}
+                style={{ cursor: 'pointer' }}
+              >
+                Câmera 360
+              </CNavLink>
+            </CNavItem>
+            <CNavItem>
+              <CNavLink
                 active={activeTab === 'location'}
                 onClick={() => setActiveTab('location')}
                 style={{ cursor: 'pointer' }}
@@ -196,6 +206,10 @@ const RoverInspection = () => {
 
             <CTabPane visible={activeTab === 'location'}>
               <LocationMonitoring roverId={roverId} />
+            </CTabPane>
+            
+            <CTabPane visible={activeTab === 'camera360'}>
+              <RTMPStream360 roverId={roverId} substationId={substationId} />
             </CTabPane>
           </CTabContent>
         </CCardBody>

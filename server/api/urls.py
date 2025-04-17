@@ -16,7 +16,8 @@ from .views import (
     request_image_view,
     process_mapping,
     iniciar_missao,
-    obter_mapa
+    obter_mapa,
+    configurar_insta360
 )
 
 router = DefaultRouter()
@@ -38,4 +39,5 @@ urlpatterns = [
     path('process-mapping/', process_mapping, name='process-mapping'),
     path('iniciar-missao/', iniciar_missao, name='iniciar_missao'),
     path('obter-mapa/', obter_mapa, name='obter_mapa'),
+    path('configurar-insta360/', configurar_insta360, name='configurar_insta360'),
 ]

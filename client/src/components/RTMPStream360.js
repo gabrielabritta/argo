@@ -9,10 +9,37 @@ import {
   CCol,
   CAlert,
   CFormSelect,
+  CModal,
+  CModalHeader,
+  CModalTitle,
+  CModalBody,
+  CModalFooter,
+  CForm,
+  CFormInput,
+  CFormLabel,
+  CFormFeedback,
+  CToast,
+  CToastBody,
+  CToastHeader
 } from '@coreui/react'
 import Hls from 'hls.js'
+import { API_BASE_URL } from '../config'
 
-const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream.m3u8` }) => {
+const RTMPStream360 = (props) => {
+  // Extrair parâmetros das props
+  const { 
+    roverId, 
+    substationId,
+    streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream.m3u8`
+  } = props;
+  
+  // Verificar se temos os IDs necessários
+  useEffect(() => {
+    if (!roverId || !substationId) {
+      console.warn('RTMPStream360: roverId ou substationId não fornecidos. Usando valores padrão.');
+    }
+  }, [roverId, substationId]);
+
   // Refs
   const containerRef = useRef(null)
   const videoRef = useRef(null)
@@ -22,6 +49,7 @@ const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream
   const viewerRef = useRef(null)
   const panoramaRef = useRef(null)
   const frameIntervalRef = useRef(null)
+  const toastRef = useRef(null)
 
   // Estado
   const [isPlaying, setIsPlaying] = useState(false)
@@ -31,6 +59,24 @@ const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream
   const [streamAddress, setStreamAddress] = useState(streamUrl)
   const [frameRate, setFrameRate] = useState(5) // 5 FPS por padrão, pode ser ajustado
   const [latency, setLatency] = useState(0)
+  
+  // Estado para configuração da Insta360
+  const [showConfigModal, setShowConfigModal] = useState(false)
+  const [configForm, setConfigForm] = useState({
+    ssid: '',
+    password: '',
+    rtmp: ''
+  })
+  const [formErrors, setFormErrors] = useState({})
+  const [responseToast, setResponseToast] = useState({
+    visible: false,
+    status: null,
+    message: ''
+  })
+  
+  // Valores efetivos dos IDs (usando valores padrão como fallback)
+  const effectiveRoverId = roverId || 'Rover-Argo-N-0';
+  const effectiveSubstationId = substationId || 'SUB001';
 
   // Inicializar o player
   useEffect(() => {
@@ -196,6 +242,107 @@ const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream
       clearInterval(frameIntervalRef.current)
       frameIntervalRef.current = null
     }
+  }
+  
+  // Funções para configuração da Insta360
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setConfigForm({
+      ...configForm,
+      [name]: value
+    })
+  }
+
+  const validateForm = () => {
+    const errors = {}
+    
+    // Check SSID and password dependency
+    if (configForm.ssid && !configForm.password) {
+      errors.password = 'Password is required when SSID is provided'
+    }
+    
+    if (configForm.password && !configForm.ssid) {
+      errors.ssid = 'SSID is required when Password is provided'
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+    
+    // Criar payload com os campos preenchidos e IDs
+    const payload = {
+      rover_id: effectiveRoverId,
+      substation_id: effectiveSubstationId
+    }
+    
+    if (configForm.ssid) payload.ssid = configForm.ssid
+    if (configForm.password) payload.password = configForm.password
+    if (configForm.rtmp) payload.rtmp = configForm.rtmp
+    
+    // Verificar se pelo menos um campo de configuração está preenchido
+    if (!configForm.ssid && !configForm.password && !configForm.rtmp) {
+      setFormErrors({ form: 'Pelo menos um campo deve ser preenchido' })
+      return;
+    }
+    
+    // Mostrar indicador de carregamento
+    setResponseToast({
+      visible: true,
+      status: null,
+      message: 'Enviando configuração...'
+    })
+    
+    try {
+      // Usar a URL relativa com API_BASE_URL do arquivo de configuração
+      const apiUrl = `${API_BASE_URL || 'http://localhost:8000/api'}/configurar-insta360/`;
+      console.log(`Enviando configuração para: ${apiUrl}`);
+      console.log('Payload:', payload);
+      
+      // Enviar requisição para a API do backend
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      })
+      
+      const result = await response.json()
+      console.log('Resposta da API:', result);
+      
+      if (response.ok) {
+        setResponseToast({
+          visible: true,
+          status: 1,
+          message: `Configuração enviada com sucesso para ${effectiveRoverId}!`
+        })
+        
+        // Resetar formulário em caso de sucesso
+        setConfigForm({ ssid: '', password: '', rtmp: '' })
+      } else {
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: `Erro: ${result.error || 'Falha ao enviar configuração'}`
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao enviar configuração:', error)
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: `Erro de conexão: ${error.message}`
+      })
+    }
+    
+    // Fechar modal e resetar formulário
+    setShowConfigModal(false)
+    setConfigForm({ ssid: '', password: '', rtmp: '' })
   }
 
   // Função para capturar um frame do vídeo
@@ -402,9 +549,40 @@ const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream
   }
 
   return (
-    <CCard className="mb-4">
+    <>
+      {responseToast.visible && (
+        <CToast 
+          ref={toastRef}
+          visible={true} 
+          autohide={true} 
+          delay={5000} 
+          onClose={() => setResponseToast({...responseToast, visible: false})}
+          className={`mb-3 ${responseToast.status === 1 ? 'bg-success text-white' : 
+                            responseToast.status === 0 ? 'bg-danger text-white' : 
+                            'bg-info text-white'}`}
+        >
+          <CToastHeader closeButton>
+            {responseToast.status === 1 ? 'Sucesso' : 
+             responseToast.status === 0 ? 'Erro' : 'Informação'}
+          </CToastHeader>
+          <CToastBody>
+            {responseToast.message}
+          </CToastBody>
+        </CToast>
+      )}
+      
+      <CCard className="mb-4">
       <CCardHeader>
-        <h4>Insta360 X3 - Player Stream RTMP 360° (Frame-by-Frame)</h4>
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <h4>Insta360 X3 - Player Stream RTMP 360° (Frame-by-Frame)</h4>
+          <CButton
+            color="success"
+            size="sm"
+            onClick={() => setShowConfigModal(true)}
+          >
+            Configurar Insta
+          </CButton>
+        </div>
         <div className="d-flex align-items-center">
           <CAlert color={
             status.type === 'loading' ? 'warning' :
@@ -534,6 +712,69 @@ const RTMPStream360 = ({ streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream
         </CRow>
       </CCardBody>
     </CCard>
+    
+    {/* Modal de Configuração da Insta360 */}
+    <CModal visible={showConfigModal} onClose={() => setShowConfigModal(false)}>
+      <CModalHeader>
+        <CModalTitle>Configurar Câmera Insta360</CModalTitle>
+      </CModalHeader>
+      <CModalBody>
+        {formErrors.form && (
+          <CAlert color="danger">{formErrors.form}</CAlert>
+        )}
+        <CForm>
+          <div className="mb-3">
+            <CFormLabel htmlFor="ssid">WiFi SSID</CFormLabel>
+            <CFormInput
+              type="text"
+              id="ssid"
+              name="ssid"
+              value={configForm.ssid}
+              onChange={handleInputChange}
+              invalid={!!formErrors.ssid}
+            />
+            {formErrors.ssid && (
+              <CFormFeedback invalid>{formErrors.ssid}</CFormFeedback>
+            )}
+          </div>
+          
+          <div className="mb-3">
+            <CFormLabel htmlFor="password">WiFi Password</CFormLabel>
+            <CFormInput
+              type="password"
+              id="password"
+              name="password"
+              value={configForm.password}
+              onChange={handleInputChange}
+              invalid={!!formErrors.password}
+            />
+            {formErrors.password && (
+              <CFormFeedback invalid>{formErrors.password}</CFormFeedback>
+            )}
+          </div>
+          
+          <div className="mb-3">
+            <CFormLabel htmlFor="rtmp">RTMP URL</CFormLabel>
+            <CFormInput
+              type="text"
+              id="rtmp"
+              name="rtmp"
+              value={configForm.rtmp}
+              onChange={handleInputChange}
+            />
+          </div>
+        </CForm>
+      </CModalBody>
+      <CModalFooter>
+        <CButton color="secondary" onClick={() => setShowConfigModal(false)}>
+          Cancelar
+        </CButton>
+        <CButton color="primary" onClick={handleSubmit}>
+          Salvar Configuração
+        </CButton>
+      </CModalFooter>
+    </CModal>
+    </>
   )
 }
 

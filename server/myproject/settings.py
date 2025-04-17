@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'api',
     'corsheaders',
     'channels',
+    'qr_code',
 ]
 
 ASGI_APPLICATION = 'myproject.asgi.application'
