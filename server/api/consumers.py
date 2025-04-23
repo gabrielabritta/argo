@@ -87,4 +87,33 @@ class RoverConsumer(AsyncWebsocketConsumer):
                 'data': event['data']
             }))
         except Exception as e:
-            logger.error(f"Error in boxes_update: {str(e)}")
+            logger.error(f"Error in boxes_update: {e}")
+
+    async def insta_config(self, event):
+        """
+        Handler para respostas de configuração Insta360.
+        """
+        try:
+            logger.info(f"[WebSocket] Recebido evento insta_config: {event}")
+            
+            # Garantir que o status seja um número inteiro
+            data = event['data'].copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[WebSocket] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[WebSocket] Não foi possível converter status para inteiro: {data['status']}")
+            
+            message = {
+                'type': 'insta_config',
+                'data': data
+            }
+            
+            logger.info(f"[WebSocket] Enviando mensagem para cliente: {message}")
+            await self.send(text_data=json.dumps(message))
+            logger.info(f"[WebSocket] Mensagem enviada com sucesso para cliente do rover {self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in insta_config: {e}", exc_info=True)

@@ -10,7 +10,6 @@ import {
   CAlert,
   CFormSelect,
   CModal,
-  CModalHeader,
   CModalTitle,
   CModalBody,
   CModalFooter,
@@ -19,11 +18,10 @@ import {
   CFormLabel,
   CFormFeedback,
   CToast,
-  CToastBody,
-  CToastHeader
+  CToastBody
 } from '@coreui/react'
 import Hls from 'hls.js'
-import { API_BASE_URL } from '../config'
+import { API_BASE_URL, WS_BASE_URL } from '../config'
 
 const RTMPStream360 = (props) => {
   // Extrair parâmetros das props
@@ -50,6 +48,8 @@ const RTMPStream360 = (props) => {
   const panoramaRef = useRef(null)
   const frameIntervalRef = useRef(null)
   const toastRef = useRef(null)
+  const timeoutRef = useRef(null)
+  const responseReceivedRef = useRef(false)
 
   // Estado
   const [isPlaying, setIsPlaying] = useState(false)
@@ -217,8 +217,74 @@ const RTMPStream360 = (props) => {
         viewerRef.current.dispose()
       }
       stopFrameCapture()
+      clearTimeout(timeoutRef.current)
     }
   }, [streamAddress])
+
+  // WebSocket para respostas de configuração Insta360
+  useEffect(() => {
+    console.log(`Conectando WebSocket para rover ${effectiveRoverId} em ${WS_BASE_URL}/rovers/${effectiveRoverId}/`)
+    const socket = new WebSocket(`${WS_BASE_URL}/rovers/${effectiveRoverId}/`)
+    
+    socket.onopen = () => {
+      console.log('WebSocket Insta360 conectado com sucesso')
+    }
+    
+    socket.onmessage = (event) => {
+      try {
+        console.log('WebSocket raw message received:', event.data)
+        const msg = JSON.parse(event.data)
+        console.log('WebSocket parsed message:', msg)
+        
+        if (msg.type === 'insta_config') {
+          console.log('Insta360 config message received:', msg.data)
+          responseReceivedRef.current = true
+          clearTimeout(timeoutRef.current)
+          
+          // Garantir que o status seja tratado como número
+          let status = msg.data.status
+          if (typeof status === 'string') {
+            status = parseInt(status, 10)
+            console.log('Status convertido de string para número:', status)
+          }
+          
+          console.log('Status final para toast:', status, typeof status)
+          
+          // Definir o toast com o status correto
+          setResponseToast({
+            visible: true,
+            status: status,
+            message: status === 1
+              ? 'Configuração aplicada com sucesso!'
+              : 'Erro ao aplicar configuração.'
+          })
+          
+          console.log('Toast configurado:', {
+            visible: true,
+            status: status,
+            message: status === 1 ? 'Configuração aplicada com sucesso!' : 'Erro ao aplicar configuração.'
+          })
+        }
+      } catch (e) { 
+        console.error('Erro ao processar mensagem WebSocket:', e)
+        console.error('Dados da mensagem com erro:', event.data)
+      }
+    }
+    
+    socket.onerror = (e) => {
+      console.error('Erro na conexão WebSocket:', e)
+    }
+    
+    socket.onclose = (e) => {
+      console.log(`WebSocket fechado com código ${e.code}, razão: ${e.reason}`)
+    }
+    
+    return () => { 
+      console.log('Limpando conexão WebSocket')
+      socket.close()
+      clearTimeout(timeoutRef.current) 
+    }
+  }, [effectiveRoverId])
 
   // Função para iniciar a captura de frames
   const startFrameCapture = () => {
@@ -270,6 +336,7 @@ const RTMPStream360 = (props) => {
   }
 
   const handleSubmit = async () => {
+    responseReceivedRef.current = false
     if (!validateForm()) {
       return;
     }
@@ -315,22 +382,15 @@ const RTMPStream360 = (props) => {
       const result = await response.json()
       console.log('Resposta da API:', result);
       
-      if (response.ok) {
-        setResponseToast({
-          visible: true,
-          status: 1,
-          message: `Configuração enviada com sucesso para ${effectiveRoverId}!`
-        })
-        
-        // Resetar formulário em caso de sucesso
-        setConfigForm({ ssid: '', password: '', rtmp: '' })
-      } else {
+      if (!response.ok) {
         setResponseToast({
           visible: true,
           status: 0,
           message: `Erro: ${result.error || 'Falha ao enviar configuração'}`
         })
+        return
       }
+      // Em caso de sucesso, aguardar resposta do dispositivo via WebSocket
     } catch (error) {
       console.error('Erro ao enviar configuração:', error)
       setResponseToast({
@@ -339,6 +399,18 @@ const RTMPStream360 = (props) => {
         message: `Erro de conexão: ${error.message}`
       })
     }
+    
+    // Iniciar timeout de resposta da câmera
+    clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      if (!responseReceivedRef.current) {
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: 'Tempo de espera esgotado - Sem conexão com a câmera.'
+        })
+      }
+    }, 10000)
     
     // Fechar modal e resetar formulário
     setShowConfigModal(false)
@@ -550,26 +622,32 @@ const RTMPStream360 = (props) => {
 
   return (
     <>
-      {responseToast.visible && (
-        <CToast 
-          ref={toastRef}
-          visible={true} 
-          autohide={true} 
-          delay={5000} 
-          onClose={() => setResponseToast({...responseToast, visible: false})}
-          className={`mb-3 ${responseToast.status === 1 ? 'bg-success text-white' : 
-                            responseToast.status === 0 ? 'bg-danger text-white' : 
-                            'bg-info text-white'}`}
-        >
-          <CToastHeader closeButton>
-            {responseToast.status === 1 ? 'Sucesso' : 
-             responseToast.status === 0 ? 'Erro' : 'Informação'}
-          </CToastHeader>
-          <CToastBody>
-            {responseToast.message}
-          </CToastBody>
-        </CToast>
-      )}
+      <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 9999 }}>
+        {responseToast.visible && (
+          <CToast
+            visible
+            autohide
+            delay={5000}
+            onClose={() => {
+              console.log('Fechando toast')
+              setResponseToast({ ...responseToast, visible: false })
+            }}
+            className={
+              responseToast.status === 1
+                ? 'bg-success text-white'
+                : responseToast.status === 0
+                ? 'bg-danger text-white'
+                : 'bg-info text-white'
+            }
+          >
+            <CToastBody>
+              {responseToast.message}
+              {/* Debug: */}
+              {/* <div>Status: {responseToast.status} ({typeof responseToast.status})</div> */}
+            </CToastBody>
+          </CToast>
+        )}
+      </div>
       
       <CCard className="mb-4">
       <CCardHeader>
@@ -715,9 +793,7 @@ const RTMPStream360 = (props) => {
     
     {/* Modal de Configuração da Insta360 */}
     <CModal visible={showConfigModal} onClose={() => setShowConfigModal(false)}>
-      <CModalHeader>
-        <CModalTitle>Configurar Câmera Insta360</CModalTitle>
-      </CModalHeader>
+      <CModalTitle>Configurar Câmera Insta360</CModalTitle>
       <CModalBody>
         {formErrors.form && (
           <CAlert color="danger">{formErrors.form}</CAlert>

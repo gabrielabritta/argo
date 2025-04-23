@@ -51,7 +51,8 @@ class MQTTHandler:
             topics = [
                 ("substations/+/rovers/+/telemetry", 1),  # QoS 1 para garantir entrega
                 ("substations/+/rovers/+/image", 1),
-                ("substations/+/rovers/+/boxes", 1), 
+                ("substations/+/rovers/+/boxes", 1),
+                ("substations/+/rovers/+/insta/config", 1),  # ouvir respostas Insta360
             ]
             client.subscribe(topics)
             logger.info(f"Inscrito nos tópicos: {topics}")
@@ -87,6 +88,28 @@ class MQTTHandler:
                 self.handle_image_message(substation_id, rover_id, msg.payload)
             elif message_type == 'boxes':
                 self.handle_boxes_message(rover_id, msg.payload)
+            elif message_type == 'insta' and len(parts) > 5 and parts[5] == 'config':
+                # config response do dispositivo
+                try:
+                    data = json.loads(msg.payload.decode())
+                    logger.info(f"[MQTT] Resposta insta/config recebida: {data}")
+                    status_value = data.get('status')
+                    logger.info(f"[MQTT] Status da resposta insta/config: {status_value}, tipo: {type(status_value)}")
+                    
+                    # Enviar via WebSocket
+                    channel_message = {
+                        'type': 'insta_config',
+                        'data': {'status': status_value}
+                    }
+                    logger.info(f"[MQTT] Enviando para WebSocket: {channel_message}")
+                    
+                    async_to_sync(self.channel_layer.group_send)(
+                        f'rover_{rover_id}',
+                        channel_message
+                    )
+                    logger.info(f"[MQTT] Mensagem enviada para o grupo WebSocket: rover_{rover_id}")
+                except Exception as e:
+                    logger.error(f"[MQTT] Erro ao tratar resposta insta/config: {e}", exc_info=True)
             elif message_type == 'telemetry':
                 self.handle_telemetry_message(substation_id, rover_id, msg.payload)
             else:
