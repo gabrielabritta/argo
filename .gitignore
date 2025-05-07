@@ -3,3 +3,5 @@ venv/
 PLAN.md
 error.txt
 debug.log
+__pycache__/
+*.pyc
