@@ -18,4 +18,4 @@ daphne==4.0.0
 pymongo==4.6.1
 qrcode==7.4.2
 Pillow==10.2.0
-pymongo
+pandas==2.2.3

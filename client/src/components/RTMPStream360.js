@@ -20,7 +20,9 @@ import {
   CToast,
   CToastBody
 } from '@coreui/react'
-import Hls from 'hls.js'
+import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
+import 'videojs-vr'
 import { API_BASE_URL, WS_BASE_URL } from '../config'
 
 const RTMPStream360 = (props) => {
@@ -39,15 +41,8 @@ const RTMPStream360 = (props) => {
   }, [roverId, substationId]);
 
   // Refs
-  const containerRef = useRef(null)
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const ctxRef = useRef(null)
-  const hlsRef = useRef(null)
-  const viewerRef = useRef(null)
-  const panoramaRef = useRef(null)
-  const frameIntervalRef = useRef(null)
-  const toastRef = useRef(null)
+  const videoPlayerRef = useRef(null)
+  const playerRef = useRef(null)
   const timeoutRef = useRef(null)
   const responseReceivedRef = useRef(false)
 
@@ -55,10 +50,8 @@ const RTMPStream360 = (props) => {
   const [isPlaying, setIsPlaying] = useState(false)
   const [fov, setFov] = useState(90)
   const [status, setStatus] = useState({ type: 'loading', message: 'Carregando...' })
-  const [projectionType, setProjectionType] = useState('dual-fisheye')
+  const [projectionType, setProjectionType] = useState('equirectangular')
   const [streamAddress, setStreamAddress] = useState(streamUrl)
-  const [frameRate, setFrameRate] = useState(5) // 5 FPS por padrão, pode ser ajustado
-  const [latency, setLatency] = useState(0)
   
   // Estado para configuração da Insta360
   const [showConfigModal, setShowConfigModal] = useState(false)
@@ -78,148 +71,140 @@ const RTMPStream360 = (props) => {
   const effectiveRoverId = roverId || 'Rover-Argo-N-0';
   const effectiveSubstationId = substationId || 'SUB001';
 
-  // Inicializar o player
+  // Inicializar o player Video.js
   useEffect(() => {
-    if (!containerRef.current || !videoRef.current || !canvasRef.current) return
+    // Verificar se o elemento de vídeo existe
+    if (!videoPlayerRef.current) return;
 
-    // Inicializar o contexto do canvas
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    ctxRef.current = ctx
+    // Configurações do player Video.js
+    const videoOptions = {
+      autoplay: true,
+      controls: true,
+      responsive: true,
+      fluid: true,
+      sources: [{
+        src: streamAddress,
+        type: 'application/x-mpegURL'
+      }],
+      html5: {
+        vhs: {
+          overrideNative: true,
+          // Configurações para baixa latência
+          maxBufferLength: 5,
+          maxMaxBufferLength: 10,
+          liveSyncDuration: 1,
+          liveMaxLatencyDuration: 5,
+          liveDurationInfinity: true,
+          backBufferLength: 5
+        },
+        nativeAudioTracks: false,
+        nativeVideoTracks: false
+      },
+      liveui: true,
+      playbackRates: [0.5, 1, 1.5, 2]
+    };
 
-    // Configurar HLS
-    const setupHls = () => {
-      try {
-        const video = videoRef.current
-        if (!video) {
-          console.error('Elemento de vídeo não encontrado para HLS')
-          setStatus({ type: 'error', message: 'Erro ao inicializar player de vídeo' })
-          return
-        }
-
-        if (!Hls.isSupported()) {
-          console.warn('HLS não é suportado neste navegador')
-          setStatus({ type: 'warning', message: 'Seu navegador pode não suportar streaming HLS' })
-          // Tentar usar suporte nativo se disponível
-          video.src = streamAddress
-          return
-        }
-
-        const hls = new Hls({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: true,
-          // Configurações otimizadas para baixa latência
-          maxBufferLength: 5,           // Reduzir de 30 para 5 segundos
-          maxMaxBufferLength: 10,       // Limitar buffer máximo a 10 segundos
-          liveSyncDuration: 1,          // Sincronizar com o ao vivo a cada 1 segundo
-          liveMaxLatencyDuration: 5,    // Latência máxima de 5 segundos
-          liveDurationInfinity: true,   // Tratar stream como infinito
-          backBufferLength: 5,          // Reduzir buffer traseiro para 5 segundos
-          // Configurações de fragmento
-          fragLoadingMaxRetry: 15,      // Mais tentativas para carregar fragmentos
-          manifestLoadingMaxRetry: 15,  // Mais tentativas para carregar manifesto
-          levelLoadingMaxRetry: 15      // Mais tentativas para carregar níveis
-        })
-
-        hlsRef.current = hls
-        console.log('HLS inicializado com sucesso')
-
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          console.log('HLS attached to video element')
-          setStatus({ type: 'loading', message: 'Conectando ao stream...' })
-          hls.loadSource(streamAddress)
-        })
-
-        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-          console.log('HLS manifest parsed, found ' + data.levels.length + ' quality levels')
-          setStatus({ type: 'playing', message: 'Stream conectado' })
-
-          // Iniciar reprodução automática
-          video.play().catch(error => {
-            console.error('Erro ao reproduzir vídeo:', error)
-          })
-        })
-
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                // Verificar se é um erro 404 (stream não encontrado)
-                if (data.details === 'manifestLoadError') {
-                  console.warn('Stream não disponível ainda:', data.response)
-                  setStatus({
-                    type: 'warning',
-                    message: `Nenhum stream disponível. Inicie uma transmissão RTMP para ${import.meta.env.VITE_RTMP_URL}/stream`
-                  })
-                  // Tentar novamente após 5 segundos
-                  setTimeout(() => {
-                    if (hlsRef.current) {
-                      hlsRef.current.startLoad()
-                    }
-                  }, 5000)
-                } else {
-                  console.error('HLS network error', data)
-                  setStatus({ type: 'error', message: 'Erro de conexão com o stream' })
-                  hls.startLoad()
-                }
-                break
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error('HLS media error', data)
-                setStatus({ type: 'error', message: 'Erro de mídia' })
-                hls.recoverMediaError()
-                break
-              default:
-                console.error('HLS fatal error', data)
-                setStatus({ type: 'error', message: 'Erro fatal no stream' })
-                break
+    // Inicializar o player
+    let player = videojs(videoPlayerRef.current, videoOptions, function onPlayerReady() {
+      console.log('Player pronto', this);
+      setStatus({ type: 'loading', message: 'Conectando ao stream...' });
+      
+      // Definir metadados para o player VR
+      this.mediainfo = this.mediainfo || {};
+      this.mediainfo.projection = projectionType;
+      
+      // Inicializar o plugin VR
+      this.vr({
+        projection: projectionType,
+        debug: false,
+        forceCardboard: false,
+        defaultFov: fov
+      });
+      
+      // Eventos do player
+      this.on('playing', () => {
+        console.log('Vídeo em reprodução');
+        setIsPlaying(true);
+        setStatus({ type: 'playing', message: 'Reproduzindo' });
+      });
+      
+      this.on('pause', () => {
+        console.log('Vídeo pausado');
+        setIsPlaying(false);
+      });
+      
+      this.on('error', (error) => {
+        console.error('Erro no player:', error);
+        setStatus({ type: 'error', message: 'Erro no player de vídeo' });
+      });
+      
+      // Verificar se o stream está disponível
+      this.on('error', function(e) {
+        if (this.error().code === 4) {
+          // Erro de mídia não disponível
+          console.warn('Stream não disponível ainda');
+          setStatus({
+            type: 'warning',
+            message: `Nenhum stream disponível. Inicie uma transmissão RTMP para ${import.meta.env.VITE_RTMP_URL}/stream`
+          });
+          
+          // Tentar novamente após 5 segundos
+          setTimeout(() => {
+            if (playerRef.current) {
+              playerRef.current.src({
+                src: streamAddress,
+                type: 'application/x-mpegURL'
+              });
+              playerRef.current.load();
             }
-          }
-        })
+          }, 5000);
+        }
+      });
+    });
 
-        hls.attachMedia(video)
+    // Salvar referência do player
+    playerRef.current = player;
 
-        // Eventos do vídeo
-        video.addEventListener('play', () => {
-          setIsPlaying(true)
-          startFrameCapture()
-        })
-
-        video.addEventListener('pause', () => {
-          setIsPlaying(false)
-          stopFrameCapture()
-        })
-
-        video.addEventListener('canplay', () => {
-          setStatus({ type: 'playing', message: 'Reproduzindo' })
-          // Atualizar dimensões do canvas
-          canvas.width = video.videoWidth
-          canvas.height = video.videoHeight
-          console.log(`Dimensões do vídeo: ${video.videoWidth}x${video.videoHeight}`)
-          // Iniciar captura de frames
-          startFrameCapture()
-        })
-      } catch (error) {
-        console.error('Erro ao configurar HLS:', error)
-        setStatus({ type: 'error', message: 'Erro ao configurar player de vídeo' })
-      }
-    }
-
-    // Configurar HLS
-    setupHls()
-
-    // Limpeza
+    // Limpeza ao desmontar o componente
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy()
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
       }
-      if (viewerRef.current) {
-        viewerRef.current.dispose()
+      clearTimeout(timeoutRef.current);
+    };
+  }, [streamAddress, projectionType]);
+  
+  // Atualizar FOV quando mudar
+  useEffect(() => {
+    if (playerRef.current && playerRef.current.vr) {
+      try {
+        const vrPlugin = playerRef.current.vr();
+        if (vrPlugin && typeof vrPlugin.setFov === 'function') {
+          vrPlugin.setFov(fov);
+        }
+      } catch (error) {
+        console.error('Erro ao atualizar FOV:', error);
       }
-      stopFrameCapture()
-      clearTimeout(timeoutRef.current)
     }
-  }, [streamAddress])
+  }, [fov]);
+
+  // Reinicializar panorama quando o tipo de projeção mudar
+  useEffect(() => {
+    console.log('Tipo de projeção alterado para:', projectionType);
+    
+    // Atualizar a projeção no player VR se ele já estiver inicializado
+    if (playerRef.current && playerRef.current.vr) {
+      try {
+        const vrPlugin = playerRef.current.vr();
+        if (vrPlugin && typeof vrPlugin.setProjection === 'function') {
+          vrPlugin.setProjection(projectionType);
+        }
+      } catch (error) {
+        console.error('Erro ao atualizar projeção:', error);
+      }
+    }
+  }, [projectionType]);
 
   // WebSocket para respostas de configuração Insta360
   useEffect(() => {
@@ -284,29 +269,60 @@ const RTMPStream360 = (props) => {
       socket.close()
       clearTimeout(timeoutRef.current) 
     }
-  }, [effectiveRoverId])
+  }, [effectiveRoverId]);
 
-  // Função para iniciar a captura de frames
-  const startFrameCapture = () => {
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current)
-    }
-
-    console.log(`Iniciando captura de frames a ${frameRate} FPS`)
+  // Funções de controle do player
+  const togglePlay = () => {
+    if (!playerRef.current) return;
     
-    // Calculando o intervalo em milissegundos
-    const intervalMs = 1000 / frameRate
-
-    frameIntervalRef.current = setInterval(() => {
-      captureFrame()
-    }, intervalMs)
+    if (playerRef.current.paused()) {
+      playerRef.current.play();
+    } else {
+      playerRef.current.pause();
+    }
   }
-
-  // Função para parar a captura de frames
-  const stopFrameCapture = () => {
-    if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current)
-      frameIntervalRef.current = null
+  
+  // Reiniciar stream
+  const restartStream = () => {
+    if (!playerRef.current) return;
+    
+    setStatus({ type: 'loading', message: 'Reconectando ao stream...' });
+    
+    // Recarregar a fonte do vídeo
+    playerRef.current.src({
+      src: streamAddress,
+      type: 'application/x-mpegURL'
+    });
+    
+    playerRef.current.load();
+    playerRef.current.play().catch(error => {
+      console.error('Erro ao reproduzir vídeo após reiniciar:', error);
+    });
+  }
+  
+  // Forçar sincronização com o ao vivo (reduzir latência)
+  const syncWithLive = () => {
+    if (!playerRef.current) return;
+    
+    setStatus({ type: 'loading', message: 'Sincronizando com o ao vivo...' });
+    
+    try {
+      // Ir para o final do stream (ao vivo)
+      const duration = playerRef.current.duration();
+      if (duration && isFinite(duration) && duration > 0) {
+        playerRef.current.currentTime(duration);
+      }
+      
+      // Reproduzir
+      playerRef.current.play().then(() => {
+        setStatus({ type: 'playing', message: 'Sincronizado com o ao vivo' });
+      }).catch(error => {
+        console.error('Erro ao sincronizar:', error);
+        setStatus({ type: 'error', message: 'Erro ao sincronizar' });
+      });
+    } catch (error) {
+      console.error('Erro ao sincronizar com o ao vivo:', error);
+      setStatus({ type: 'error', message: 'Erro ao sincronizar' });
     }
   }
   
@@ -417,209 +433,6 @@ const RTMPStream360 = (props) => {
     setConfigForm({ ssid: '', password: '', rtmp: '' })
   }
 
-  // Função para capturar um frame do vídeo
-  const captureFrame = () => {
-    if (!videoRef.current || !canvasRef.current || !ctxRef.current) return
-
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    const ctx = ctxRef.current
-
-    try {
-      // Verificar se o vídeo está pronto
-      if (video.readyState < 2) return
-
-      // Desenhar o frame atual do vídeo no canvas
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-      // Obter a imagem do canvas como um dataURL
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
-
-      // Criar panorama com o frame capturado
-      createPanorama(dataUrl)
-    } catch (error) {
-      console.error('Erro ao capturar frame:', error)
-    }
-  }
-
-  // Função para criar panorama a partir de uma imagem
-  const createPanorama = (imageUrl) => {
-    if (!containerRef.current) return
-
-    try {
-      // Verificar se as bibliotecas estão disponíveis
-      if (typeof PANOLENS === 'undefined' || typeof THREE === 'undefined') {
-        console.error('PANOLENS ou THREE não estão disponíveis')
-        setStatus({ type: 'error', message: 'Bibliotecas necessárias não encontradas' })
-        return
-      }
-
-      // Limpar visualizador anterior se existir
-      if (viewerRef.current) {
-        try {
-          // Remover panorama do visualizador antes de descartá-lo
-          if (panoramaRef.current) {
-            viewerRef.current.remove(panoramaRef.current)
-          }
-          viewerRef.current.dispose()
-        } catch (error) {
-          console.warn('Erro ao descartar visualizador:', error)
-        }
-        viewerRef.current = null
-      }
-
-      // Limpar panorama anterior se existir
-      if (panoramaRef.current) {
-        try {
-          panoramaRef.current.dispose()
-        } catch (error) {
-          console.warn('Erro ao descartar panorama:', error)
-        }
-        panoramaRef.current = null
-      }
-
-      // Criar um novo panorama com a imagem
-      let imagePanorama
-
-      try {
-        // Criar o panorama com base no tipo de projeção
-        if (projectionType === 'dual-fisheye') {
-          // Para dual-fisheye, podemos tentar usar o tipo DUAL_FISHEYE se disponível
-          if (PANOLENS.ImagePanorama.TYPE && PANOLENS.ImagePanorama.TYPE.DUAL_FISHEYE) {
-            console.log('Usando projeção DUAL_FISHEYE')
-            imagePanorama = new PANOLENS.ImagePanorama(
-              imageUrl,
-              {
-                imageType: PANOLENS.ImagePanorama.TYPE.DUAL_FISHEYE
-              }
-            )
-          } else {
-            // Fallback para panorama padrão
-            console.log('DUAL_FISHEYE não disponível, usando panorama padrão')
-            imagePanorama = new PANOLENS.ImagePanorama(imageUrl)
-          }
-        } else {
-          // Panorama padrão para outros tipos
-          imagePanorama = new PANOLENS.ImagePanorama(imageUrl)
-        }
-
-        panoramaRef.current = imagePanorama
-      } catch (error) {
-        console.error('Erro ao criar panorama de imagem:', error)
-        // Tentar criar um panorama simples como fallback
-        imagePanorama = new PANOLENS.ImagePanorama(imageUrl)
-        panoramaRef.current = imagePanorama
-      }
-
-      // Configurar o visualizador
-      const viewer = new PANOLENS.Viewer({
-        container: containerRef.current,
-        controlBar: false,
-        autoRotate: false,
-        autoRotateSpeed: 0.5,
-        cameraFov: fov
-      })
-      viewerRef.current = viewer
-
-      // Adicionar o panorama ao visualizador
-      viewer.add(imagePanorama)
-    } catch (error) {
-      console.error('Erro ao criar panorama:', error)
-    }
-  }
-
-  // Atualizar FOV quando mudar
-  useEffect(() => {
-    if (viewerRef.current) {
-      viewerRef.current.setCameraFov(fov)
-    }
-  }, [fov])
-
-  // Atualizar taxa de frames quando mudar
-  useEffect(() => {
-    if (isPlaying) {
-      // Reiniciar a captura com a nova taxa
-      stopFrameCapture()
-      startFrameCapture()
-    }
-  }, [frameRate])
-
-  // Reinicializar panorama quando o tipo de projeção mudar
-  useEffect(() => {
-    console.log('Tipo de projeção alterado para:', projectionType)
-  }, [projectionType])
-
-  // Controlar reprodução do vídeo
-  const togglePlay = () => {
-    const video = videoRef.current
-    if (!video) return
-
-    if (video.paused) {
-      video.play().catch(error => {
-        console.error('Erro ao reproduzir vídeo:', error)
-        setStatus({ type: 'error', message: 'Erro ao reproduzir: ' + error.message })
-      })
-    } else {
-      video.pause()
-    }
-  }
-
-  // Reiniciar stream
-  const restartStream = () => {
-    if (hlsRef.current && videoRef.current) {
-      setStatus({ type: 'loading', message: 'Reconectando ao stream...' })
-      hlsRef.current.stopLoad()
-      hlsRef.current.startLoad()
-      if (!videoRef.current.paused) {
-        videoRef.current.play().catch(console.error)
-      }
-    }
-  }
-
-  // Forçar sincronização com o ao vivo (reduzir latência)
-  const syncWithLive = () => {
-    if (hlsRef.current && videoRef.current) {
-      setStatus({ type: 'loading', message: 'Sincronizando com o ao vivo...' })
-
-      try {
-        // Obter o nível atual
-        const currentLevel = hlsRef.current.currentLevel;
-
-        // Parar carregamento
-        hlsRef.current.stopLoad();
-
-        // Verificar se a duração é válida antes de definir currentTime
-        if (videoRef.current.duration &&
-            isFinite(videoRef.current.duration) &&
-            videoRef.current.duration > 0) {
-          // Limpar buffer - ir para o final do stream menos 0.1 segundos
-          const newTime = Math.max(0, videoRef.current.duration - 0.1);
-          console.log(`Definindo currentTime para ${newTime}s (duração: ${videoRef.current.duration}s)`);
-          videoRef.current.currentTime = newTime;
-        } else {
-          console.warn('Duração inválida:', videoRef.current.duration);
-        }
-
-        // Reiniciar carregamento no mesmo nível
-        hlsRef.current.startLoad();
-        if (currentLevel !== null && currentLevel !== undefined) {
-          hlsRef.current.currentLevel = currentLevel;
-        }
-
-        // Reproduzir
-        videoRef.current.play().then(() => {
-          setStatus({ type: 'playing', message: 'Sincronizado com o ao vivo' })
-        }).catch(error => {
-          console.error('Erro ao sincronizar:', error)
-          setStatus({ type: 'error', message: 'Erro ao sincronizar' })
-        });
-      } catch (error) {
-        console.error('Erro ao sincronizar com o ao vivo:', error);
-        setStatus({ type: 'error', message: 'Erro ao sincronizar' });
-      }
-    }
-  }
-
   return (
     <>
       <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 9999 }}>
@@ -642,214 +455,166 @@ const RTMPStream360 = (props) => {
           >
             <CToastBody>
               {responseToast.message}
-              {/* Debug: */}
-              {/* <div>Status: {responseToast.status} ({typeof responseToast.status})</div> */}
             </CToastBody>
           </CToast>
         )}
       </div>
       
       <CCard className="mb-4">
-      <CCardHeader>
-        <div className="d-flex justify-content-between align-items-center mb-2">
-          <h4>Insta360 X3 - Player Stream RTMP 360° (Frame-by-Frame)</h4>
-          <CButton
-            color="success"
-            size="sm"
-            onClick={() => setShowConfigModal(true)}
-          >
-            Configurar Insta
-          </CButton>
-        </div>
-        <div className="d-flex align-items-center">
-          <CAlert color={
-            status.type === 'loading' ? 'warning' :
-            status.type === 'playing' ? 'success' :
-            'danger'
-          }
-          className="py-1 px-3 mb-0 me-2">
-            {status.message}
-          </CAlert>
-
-          {/* Indicador de FPS */}
-          <CAlert
-            color="info"
-            className="py-1 px-3 mb-0 me-2 d-flex align-items-center"
-          >
-            <i className="cil-movie me-1"></i>
-            {frameRate} FPS
-          </CAlert>
-        </div>
-      </CCardHeader>
-      <CCardBody>
-        <div id="video-container" style={{
-          position: 'relative',
-          width: '100%',
-          height: '0',
-          paddingBottom: '56.25%',
-          marginBottom: '20px',
-          backgroundColor: '#000',
-          borderRadius: '8px',
-          overflow: 'hidden'
-        }}>
-          {/* Container para o panorama */}
-          <div
-            ref={containerRef}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              zIndex: 2
-            }}
-          />
-
-          {/* Vídeo original (escondido) */}
-          <video
-            ref={videoRef}
-            crossOrigin="anonymous"
-            muted
-            playsInline
-            autoPlay
-            loop
-            style={{
-              display: 'none',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain'
-            }}
-          />
-
-          {/* Canvas para capturar frames (escondido) */}
-          <canvas
-            ref={canvasRef}
-            style={{
-              display: 'none',
-              position: 'absolute',
-              top: 0,
-              left: 0
-            }}
-          />
-        </div>
-
-        <div className="mb-3">
-          <CButton color="primary" onClick={togglePlay} className="me-2">
-            <i className={`cil-${isPlaying ? 'media-pause' : 'media-play'}`}></i> {isPlaying ? 'Pausar' : 'Reproduzir'}
-          </CButton>
-          <CButton color="warning" onClick={restartStream} className="me-2">
-            <i className="cil-loop-circular"></i> Reiniciar Stream
-          </CButton>
-          <CButton color="danger" onClick={syncWithLive} className="me-2">
-            <i className="cil-speedometer"></i> Sincronizar Ao Vivo
-          </CButton>
-        </div>
-
-        <CRow className="mb-3">
-          <CCol md={6}>
-            <label htmlFor="fov-range" className="form-label">
-              Zoom / Campo de Visão: <span>{fov}°</span>
-            </label>
-            <CFormRange
-              id="fov-range"
-              min="30"
-              max="120"
-              value={fov}
-              onChange={(e) => setFov(parseInt(e.target.value))}
-            />
-          </CCol>
-          <CCol md={6}>
-            <label htmlFor="fps-range" className="form-label">
-              Taxa de Frames (FPS): <span>{frameRate}</span>
-            </label>
-            <CFormRange
-              id="fps-range"
-              min="1"
-              max="30"
-              value={frameRate}
-              onChange={(e) => setFrameRate(parseInt(e.target.value))}
-            />
-          </CCol>
-        </CRow>
-
-        <CRow>
-          <CCol>
-            <CFormSelect
-              className="mb-3"
-              aria-label="Tipo de Projeção"
-              value={projectionType}
-              onChange={(e) => setProjectionType(e.target.value)}
+        <CCardHeader>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h4>Insta360 X3 - Player Stream RTMP 360°</h4>
+            <CButton
+              color="success"
+              size="sm"
+              onClick={() => setShowConfigModal(true)}
             >
-              <option value="equirectangular">Equiretangular (padrão)</option>
-              <option value="dual-fisheye">Dual Fisheye (Insta360)</option>
-            </CFormSelect>
-          </CCol>
-        </CRow>
-      </CCardBody>
-    </CCard>
-    
-    {/* Modal de Configuração da Insta360 */}
-    <CModal visible={showConfigModal} onClose={() => setShowConfigModal(false)}>
-      <CModalTitle>Configurar Câmera Insta360</CModalTitle>
-      <CModalBody>
-        {formErrors.form && (
-          <CAlert color="danger">{formErrors.form}</CAlert>
-        )}
-        <CForm>
-          <div className="mb-3">
-            <CFormLabel htmlFor="ssid">WiFi SSID</CFormLabel>
-            <CFormInput
-              type="text"
-              id="ssid"
-              name="ssid"
-              value={configForm.ssid}
-              onChange={handleInputChange}
-              invalid={!!formErrors.ssid}
-            />
-            {formErrors.ssid && (
-              <CFormFeedback invalid>{formErrors.ssid}</CFormFeedback>
-            )}
+              Configurar Insta
+            </CButton>
           </div>
-          
-          <div className="mb-3">
-            <CFormLabel htmlFor="password">WiFi Password</CFormLabel>
-            <CFormInput
-              type="password"
-              id="password"
-              name="password"
-              value={configForm.password}
-              onChange={handleInputChange}
-              invalid={!!formErrors.password}
-            />
-            {formErrors.password && (
-              <CFormFeedback invalid>{formErrors.password}</CFormFeedback>
-            )}
+          <div className="d-flex align-items-center">
+            <CAlert color={
+              status.type === 'loading' ? 'warning' :
+              status.type === 'playing' ? 'success' :
+              'danger'
+            }
+            className="py-1 px-3 mb-0 me-2">
+              {status.message}
+            </CAlert>
           </div>
-          
-          <div className="mb-3">
-            <CFormLabel htmlFor="rtmp">RTMP URL</CFormLabel>
-            <CFormInput
-              type="text"
-              id="rtmp"
-              name="rtmp"
-              value={configForm.rtmp}
-              onChange={handleInputChange}
-            />
+        </CCardHeader>
+        <CCardBody>
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            height: '0',
+            paddingBottom: '56.25%',
+            marginBottom: '20px',
+            backgroundColor: '#000',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            {/* Video.js Player */}
+            <div style={{ width: '100%', height: '100%', position: 'absolute' }}>
+              <video
+                ref={videoPlayerRef}
+                className="video-js vjs-default-skin vjs-big-play-centered"
+                crossOrigin="anonymous"
+                controls
+                playsInline
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
           </div>
-        </CForm>
-      </CModalBody>
-      <CModalFooter>
-        <CButton color="secondary" onClick={() => setShowConfigModal(false)}>
-          Cancelar
-        </CButton>
-        <CButton color="primary" onClick={handleSubmit}>
-          Salvar Configuração
-        </CButton>
-      </CModalFooter>
-    </CModal>
+
+          <div className="mb-3">
+            <CButton color="primary" onClick={togglePlay} className="me-2">
+              <i className={`cil-${isPlaying ? 'media-pause' : 'media-play'}`}></i> {isPlaying ? 'Pausar' : 'Reproduzir'}
+            </CButton>
+            <CButton color="warning" onClick={restartStream} className="me-2">
+              <i className="cil-loop-circular"></i> Reiniciar Stream
+            </CButton>
+            <CButton color="danger" onClick={syncWithLive} className="me-2">
+              <i className="cil-speedometer"></i> Sincronizar Ao Vivo
+            </CButton>
+          </div>
+
+          <CRow className="mb-3">
+            <CCol md={6}>
+              <label htmlFor="fov-range" className="form-label">
+                Zoom / Campo de Visão: <span>{fov}°</span>
+              </label>
+              <CFormRange
+                id="fov-range"
+                min="30"
+                max="120"
+                value={fov}
+                onChange={(e) => setFov(parseInt(e.target.value))}
+              />
+            </CCol>
+          </CRow>
+
+          <CRow>
+            <CCol>
+              <CFormSelect
+                className="mb-3"
+                aria-label="Tipo de Projeção"
+                value={projectionType}
+                onChange={(e) => setProjectionType(e.target.value)}
+              >
+                <option value="equirectangular">Equiretangular (padrão)</option>
+                <option value="360">360° Esférico</option>
+                <option value="360_LR">360° Estéreo (Lado a Lado)</option>
+                <option value="360_TB">360° Estéreo (Topo/Base)</option>
+                <option value="EAC">Cubo Equi-Angular (EAC)</option>
+                <option value="fisheye">Fisheye</option>
+              </CFormSelect>
+            </CCol>
+          </CRow>
+        </CCardBody>
+      </CCard>
+      
+      {/* Modal de Configuração da Insta360 */}
+      <CModal visible={showConfigModal} onClose={() => setShowConfigModal(false)}>
+        <CModalTitle>Configurar Câmera Insta360</CModalTitle>
+        <CModalBody>
+          {formErrors.form && (
+            <CAlert color="danger">{formErrors.form}</CAlert>
+          )}
+          <CForm>
+            <div className="mb-3">
+              <CFormLabel htmlFor="ssid">SSID (Nome da Rede Wi-Fi)</CFormLabel>
+              <CFormInput
+                type="text"
+                id="ssid"
+                name="ssid"
+                value={configForm.ssid}
+                onChange={handleInputChange}
+                invalid={!!formErrors.ssid}
+              />
+              {formErrors.ssid && (
+                <CFormFeedback invalid>{formErrors.ssid}</CFormFeedback>
+              )}
+            </div>
+            <div className="mb-3">
+              <CFormLabel htmlFor="password">Senha Wi-Fi</CFormLabel>
+              <CFormInput
+                type="password"
+                id="password"
+                name="password"
+                value={configForm.password}
+                onChange={handleInputChange}
+                invalid={!!formErrors.password}
+              />
+              {formErrors.password && (
+                <CFormFeedback invalid>{formErrors.password}</CFormFeedback>
+              )}
+            </div>
+            <div className="mb-3">
+              <CFormLabel htmlFor="rtmp">Endereço RTMP (opcional)</CFormLabel>
+              <CFormInput
+                type="text"
+                id="rtmp"
+                name="rtmp"
+                value={configForm.rtmp}
+                onChange={handleInputChange}
+                placeholder="rtmp://servidor:porta/aplicacao/chave"
+              />
+              <small className="form-text text-muted">
+                Se não informado, será usado o endereço RTMP padrão do sistema.
+              </small>
+            </div>
+          </CForm>
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setShowConfigModal(false)}>
+            Cancelar
+          </CButton>
+          <CButton color="primary" onClick={handleSubmit}>
+            Enviar Configuração
+          </CButton>
+        </CModalFooter>
+      </CModal>
     </>
   )
 }

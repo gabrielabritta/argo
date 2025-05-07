@@ -46,7 +46,9 @@
     "react-select": "^5.8.0",
     "redux": "5.0.1",
     "simplebar-react": "^3.2.5",
-    "three": "^0.162.0"
+    "three": "^0.162.0",
+    "video.js": "^7.21.5",
+    "videojs-vr": "^1.10.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

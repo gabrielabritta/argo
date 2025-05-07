@@ -1,69 +1,46 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   CCard,
   CCardBody,
   CCardHeader,
   CCol,
   CRow,
-  CButton,
   CSpinner,
+  CButton,
+  CButtonGroup,
 } from '@coreui/react'
+import RoverPathVisualizer from '../../components/RoverPathVisualizer'
 
 const Missoes = () => {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const canvasRef = useRef(null)
-  const imageRef = useRef(null)
-  const [imageLoaded, setImageLoaded] = useState(false)
+  const [visualizerSize, setVisualizerSize] = useState({ width: 800, height: 600 })
 
-  useEffect(() => {
-    // Carregar a imagem quando o componente for montado
-    const img = new Image()
-    img.src = '/mapaNovo.png' // Caminho para a imagem estática
-    img.onload = () => {
-      imageRef.current = img
-      setImageLoaded(true)
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
-      canvas.width = img.width
-      canvas.height = img.height
-      ctx.drawImage(img, 0, 0, img.width, img.height)
+  // Handle window resize to make the visualizer responsive
+  React.useEffect(() => {
+    const handleResize = () => {
+      const cardBody = document.querySelector('.card-body-visualizer')
+      if (cardBody) {
+        const width = Math.min(cardBody.clientWidth - 30, 1200)
+        setVisualizerSize({ width, height: width * 0.75 })
+      }
     }
-    img.onerror = () => {
-      setError('Erro ao carregar a imagem do mapa')
-    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const handleCanvasClick = (e) => {
-    if (!imageLoaded || loading) return
+  const handleLocationSelect = async (x, y) => {
+    if (loading) return
 
-    const canvas = canvasRef.current
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    // Desenhar um círculo no ponto clicado
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height)
-
-    ctx.beginPath()
-    ctx.arc(x, y, 5, 0, 2 * Math.PI)
-    ctx.fillStyle = 'red'
-    ctx.fill()
-
-    // Enviar as coordenadas para o backend
-    enviarCoordenadas(x, y)
-  }
-
-  const enviarCoordenadas = async (x, y) => {
     setLoading(true)
     setMessage('')
     setError('')
 
     try {
-      // Usar o mesmo padrão de chamada que funciona em outros componentes
+      // Convert the world coordinates to the format expected by the backend
       const response = await fetch(`http://localhost:8000/api/iniciar-missao/`, {
         method: 'POST',
         headers: {
@@ -73,7 +50,7 @@ const Missoes = () => {
       })
 
       if (!response.ok) {
-        throw new Error(`Erro HTTP: ${response.status}`);
+        throw new Error(`Erro HTTP: ${response.status}`)
       }
 
       const data = await response.json()
@@ -91,12 +68,15 @@ const Missoes = () => {
       <CRow>
         <CCol xs={12}>
           <CCard className="mb-4">
-            <CCardHeader>
-              <strong>Missões</strong> <small>Selecione um ponto no mapa para iniciar uma missão</small>
+            <CCardHeader className="d-flex justify-content-between align-items-center">
+              <div>
+                <strong>Missões</strong> <small>Visualização de Rotas do Rover</small>
+              </div>
+              <CButton color="primary" size="sm">Rover 1</CButton>
             </CCardHeader>
-            <CCardBody>
+            <CCardBody className="card-body-visualizer">
               <p className="text-medium-emphasis small">
-                Clique em qualquer ponto do mapa para definir o destino da missão.
+                Clique em qualquer ponto do mapa para definir o destino da missão. O sistema calculará a rota ideal para o rover.
               </p>
 
               {error && (
@@ -111,30 +91,49 @@ const Missoes = () => {
                 </div>
               )}
 
-              <div className="position-relative">
-                <canvas
-                  ref={canvasRef}
-                  onClick={handleCanvasClick}
-                  style={{
-                    border: '1px solid #ccc',
-                    cursor: loading ? 'wait' : 'crosshair',
-                    maxWidth: '100%'
-                  }}
+              <div className="position-relative d-flex justify-content-center">
+                <RoverPathVisualizer
+                  width={visualizerSize.width}
+                  height={visualizerSize.height}
+                  onLocationSelect={handleLocationSelect}
                 />
-
-                {!imageLoaded && (
-                  <div className="position-absolute top-50 start-50 translate-middle">
-                    <CSpinner color="primary" />
+                
+                {loading && (
+                  <div className="position-absolute top-50 start-50 translate-middle" style={{ zIndex: 10 }}>
+                    <div className="bg-white p-3 rounded shadow-sm">
+                      <CSpinner color="primary" />
+                      <p className="mt-2 mb-0">Calculando rota...</p>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {loading && (
-                <div className="mt-3 text-center">
-                  <CSpinner color="primary" />
-                  <p className="mt-2">Processando solicitação...</p>
+              <div className="mt-4">
+                <h5>Informações da Missão</h5>
+                <div className="card bg-light mb-3">
+                  <div className="card-header">Rover 1</div>
+                  <div className="card-body">
+                    <p className="card-text">
+                      <strong>Status:</strong> Em missão<br />
+                      <strong>Posição atual:</strong> (-165.98, -96.13)<br />
+                      <strong>Destino:</strong> (-101.98, 8.19)<br />
+                      <strong>Distância:</strong> 127.32m<br />
+                      <strong>Tempo estimado:</strong> 4min 24s
+                    </p>
+                  </div>
                 </div>
-              )}
+                <div className="card bg-primary text-white mb-3">
+                  <div className="card-header">Detalhes da Rota</div>
+                  <div className="card-body">
+                    <p className="card-text">
+                      <strong>Origem:</strong> ls_pr1_1<br />
+                      <strong>Destino:</strong> b_busip4_1<br />
+                      <strong>Pontos de passagem:</strong> 17<br />
+                      <strong>Obstáculos evitados:</strong> 4
+                    </p>
+                  </div>
+                </div>
+              </div>
             </CCardBody>
           </CCard>
         </CCol>

@@ -19,6 +19,12 @@ from .views import (
     obter_mapa,
     configurar_insta360
 )
+from .graph_routes import (
+    get_graph_data,
+    get_obstacles,
+    get_sample_graph_data,
+    get_sample_obstacles
+)
 
 router = DefaultRouter()
 router.register(r'rovers', RoverViewSet)
@@ -40,4 +46,9 @@ urlpatterns = [
     path('iniciar-missao/', iniciar_missao, name='iniciar_missao'),
     path('obter-mapa/', obter_mapa, name='obter_mapa'),
     path('configurar-insta360/', configurar_insta360, name='configurar_insta360'),
+    # New graph visualization endpoints
+    path('graph-data/', get_graph_data, name='graph-data'),
+    path('obstacles/', get_obstacles, name='obstacles'),
+    path('sample-graph-data/', get_sample_graph_data, name='sample-graph-data'),
+    path('sample-obstacles/', get_sample_obstacles, name='sample-obstacles'),
 ]
