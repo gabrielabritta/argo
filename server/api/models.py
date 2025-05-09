@@ -3,12 +3,17 @@ from django.db import models
 class Substation(models.Model):
     name = models.CharField(max_length=200)
     identifier = models.CharField(max_length=100, unique=True)
-    location = models.CharField(max_length=200)
+    latitude = models.FloatField(default=-23.550520)  # São Paulo como padrão
+    longitude = models.FloatField(default=-46.633308)  # São Paulo como padrão
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.name} ({self.identifier})"
+
+    @property
+    def coordinates(self):
+        return [self.latitude, self.longitude]
 
 class Rover(models.Model):
     substation = models.ForeignKey(Substation, on_delete=models.CASCADE)

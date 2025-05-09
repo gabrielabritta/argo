@@ -32,9 +32,9 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 // Componente para criar ícones customizados por status
 const createStatusIcon = (status) => {
-  const color = status === 'operational' ? '#2eb85c' : 
+  const color = status === 'operational' ? '#2eb85c' :
                 status === 'maintenance' ? '#f9b115' : '#e55353';
-                
+
   return L.divIcon({
     className: 'custom-div-icon',
     html: `<div style="background-color: ${color}; width: 36px; height: 36px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
@@ -60,22 +60,25 @@ const SubstationMap = () => {
   useEffect(() => {
     const fetchSubstations = async () => {
       try {
-        // Mesmos dados do seu código original
-        const mockData = [
-          {
-            id: 1,
-            name: 'Argo Parnaíba',
-            // Coordenadas precisas sem necessidade de ajustes
-            coordinates: [-3.123201322652942, -41.765692627657174],
-            status: 'operational',
-            voltage: '500kV',
-            rovers: 3,
-            lastInspection: '2024-10-15',
-            state: 'PI',
-          },
-        ];
+        const response = await fetch('http://localhost:8000/api/substations/');
+        if (!response.ok) {
+          throw new Error('Erro ao carregar subestações');
+        }
+        const data = await response.json();
 
-        setSubstations(mockData);
+        // Transformar os dados para o formato esperado pelo mapa
+        const formattedData = data.map(substation => ({
+          id: substation.identifier,
+          name: substation.name,
+          coordinates: [substation.latitude, substation.longitude],
+          status: substation.is_active ? 'operational' : 'maintenance',
+          voltage: '500kV', // Valor padrão
+          rovers: substation.rovers?.length || 0,
+          lastInspection: new Date().toISOString().split('T')[0], // Data atual como exemplo
+          state: 'SP' // Estado padrão
+        }));
+
+        setSubstations(formattedData);
         setLoading(false);
       } catch (error) {
         console.error('Erro ao carregar subestações:', error);
@@ -132,7 +135,7 @@ const SubstationMap = () => {
           </div>
         ) : (
           <div style={mapStyle}>
-            <MapContainer 
+            <MapContainer
               bounds={brazilBounds}
               style={{ height: '100%', width: '100%' }}
               zoom={5}
@@ -145,17 +148,17 @@ const SubstationMap = () => {
                 attribution='&copy; <a href="[https://www.openstreetmap.org/copyright">OpenStreetMap</a>](https://www.openstreetmap.org/copyright">OpenStreetMap</a>) contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              
+
               {/* Overlay SVG - Brasil */}
               <ImageOverlay
                 url="/src/assets/images/brazil.svg"
                 bounds={brazilBounds}
                 opacity={0.5}
               />
-              
+
               {/* Marcadores das subestações */}
               {substations.map((substation) => (
-                <Marker 
+                <Marker
                   key={substation.id}
                   position={substation.coordinates}
                   icon={createStatusIcon(substation.status)}
@@ -201,7 +204,7 @@ const SubstationMap = () => {
                 </Marker>
               ))}
             </MapContainer>
-            
+
             {/* Legenda de cores - mantida igual ao original */}
             <div
               className="position-absolute bottom-0 start-0 p-2 bg-white bg-opacity-75 rounded m-2"

@@ -1,16 +1,12 @@
 import React from 'react'
 
 const Dashboard = React.lazy(() => import('./views/dashboard/Dashboard'))
-const Camera = React.lazy(() => import('./views/dashboard/CameraMonitoring'))
-const Localizacao = React.lazy(() => import('./views/dashboard/LocationMonitoring'))
 const Mapeamento = React.lazy(() => import('./views/dashboard/Mapping'))
 const Colors = React.lazy(() => import('./views/theme/colors/Colors'))
 const Typography = React.lazy(() => import('./views/theme/typography/Typography'))
 const SelectionView = React.lazy(() => import('./views/selection/SelectionView'))
 const SubstationInspection = React.lazy(() => import('./views/inspection/SubstationInspection'))
 const RoverInspection = React.lazy(() => import('./views/inspection/RoverInspection'))
-const CameraMonitoring = React.lazy(() => import('./views/dashboard/CameraMonitoring'))
-const LocationMonitoring = React.lazy(() => import('./views/dashboard/LocationMonitoring'))
 const Missoes = React.lazy(() => import('./views/missoes/Missoes'))
 const SubstationDetails = React.lazy(() => import('./views/inspect/SubstationDetails'))
 const RoverControl = React.lazy(() => import('./views/inspect/RoverControl'))
@@ -66,7 +62,7 @@ const Widgets = React.lazy(() => import('./views/widgets/Widgets'))
 const routes = [
   { path: '/', exact: true, name: 'Home' },
   { path: '/dashboard', name: 'Dashboard', element: Dashboard },
-  { path: '/stream360', name: 'Stream 360° RTMP', element: RTMPStream360 },
+  { path: '/stream360', name: 'Camera360', element: RTMPStream360 },
   { path: '/selection', name: 'Seleção e Inspeção', element: SelectionView },
   {
     path: '/inspect/substation/:substationId',
@@ -82,8 +78,6 @@ const routes = [
     path: '/inspect/rover/:roverId',
     element: RoverInspection,
   },
-  { path: '/controle/camera', name: 'Monitoramento de Câmera', element: CameraMonitoring },
-  { path: '/controle/localizacao', name: 'Monitoramento de Localização', element: LocationMonitoring },
   { path: '/controle/mapeamento', name: 'Mapeamento', element: Mapeamento },
   { path: '/theme', name: 'Theme', element: Colors, exact: true },
   { path: '/theme/colors', name: 'Colors', element: Colors },
@@ -101,13 +95,12 @@ const routes = [
   { path: '/base/popovers', name: 'Popovers', element: Popovers },
   { path: '/base/progress', name: 'Progress', element: Progress },
   { path: '/base/spinners', name: 'Spinners', element: Spinners },
-  { path: '/base/tabs', name: 'Tabs', element: Tabs },
   { path: '/base/tables', name: 'Tables', element: Tables },
   { path: '/base/tooltips', name: 'Tooltips', element: Tooltips },
   { path: '/buttons', name: 'Buttons', element: Buttons, exact: true },
   { path: '/buttons/buttons', name: 'Buttons', element: Buttons },
-  { path: '/buttons/dropdowns', name: 'Dropdowns', element: Dropdowns },
   { path: '/buttons/button-groups', name: 'Button Groups', element: ButtonGroups },
+  { path: '/buttons/dropdowns', name: 'Dropdowns', element: Dropdowns },
   { path: '/charts', name: 'Charts', element: Charts },
   { path: '/forms', name: 'Forms', element: FormControl, exact: true },
   { path: '/forms/form-control', name: 'Form Control', element: FormControl },

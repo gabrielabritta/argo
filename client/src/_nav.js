@@ -2,11 +2,8 @@ import React from 'react'
 import CIcon from '@coreui/icons-react'
 import {
   cilSpeedometer,
-  cilCamera,
-  cilMap,
   cilSearch,
   cilLocationPin,
-  cilVideo,
 } from '@coreui/icons'
 import { CNavGroup, CNavItem } from '@coreui/react'
 
@@ -25,27 +22,9 @@ const _nav = [
   },
   {
     component: CNavItem,
-    name: 'Camera',
-    to: '/controle/camera',
-    icon: <CIcon icon={cilCamera} customClassName="nav-icon" />,
-  },
-  {
-    component: CNavItem,
-    name: 'Localização',
-    to: '/controle/localizacao',
-    icon: <CIcon icon={cilMap} customClassName="nav-icon" />,
-  },
-  {
-    component: CNavItem,
     name: 'Missões',
     to: '/missoes',
     icon: <CIcon icon={cilLocationPin} customClassName="nav-icon" />,
-  },
-  {
-    component: CNavItem,
-    name: 'Stream 360° RTMP',
-    to: '/stream360',
-    icon: <CIcon icon={cilVideo} customClassName="nav-icon" />,
   },
 ]
 

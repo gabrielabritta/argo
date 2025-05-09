@@ -8,7 +8,7 @@ import { CBreadcrumb, CBreadcrumbItem } from '@coreui/react'
 const AppBreadcrumb = () => {
   const currentLocation = useLocation().pathname
   const searchParams = new URLSearchParams(useLocation().search)
-  
+
   const getRouteName = (pathname, routes) => {
     const currentRoute = routes.find((route) => route.path === pathname)
     return currentRoute ? currentRoute.name : false
@@ -16,7 +16,7 @@ const AppBreadcrumb = () => {
 
   const getBreadcrumbs = (location) => {
     const breadcrumbs = []
-    
+
     // Encontrar a rota atual
     const currentRoute = routes.find(route => {
       const routePath = route.path.split('/:')[0]
@@ -37,7 +37,7 @@ const AppBreadcrumb = () => {
       if (location.includes('/inspect/substation/')) {
         const pathParts = location.split('/')
         const substationId = pathParts[3]
-        
+
         breadcrumbs.push({
           pathname: `/inspect/substation/${substationId}`,
           name: 'Subestação',
@@ -73,7 +73,9 @@ const AppBreadcrumb = () => {
 
   return (
     <CBreadcrumb className="my-0">
-      <CBreadcrumbItem href="/#/dashboard">Home</CBreadcrumbItem>
+      {currentLocation !== '/dashboard' && (
+        <CBreadcrumbItem href="/#/dashboard">Home</CBreadcrumbItem>
+      )}
       {breadcrumbs.map((breadcrumb, index) => {
         return (
           <CBreadcrumbItem

@@ -76,7 +76,7 @@ const SubstationInspection = () => {
     const fetchRoversData = async () => {
       try {
         const roversResponse = await fetch(
-          `http://localhost:8000/api/active-rovers/?substation=${substationId}`,
+          `http://localhost:8000/api/rovers/?substation=${substationId}`,
         )
         if (!roversResponse.ok) {
           throw new Error('Erro na requisição dos rovers')
