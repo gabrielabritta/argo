@@ -53,6 +53,9 @@ class MQTTHandler:
                 ("substations/+/rovers/+/image", 1),
                 ("substations/+/rovers/+/boxes", 1),
                 ("substations/+/rovers/+/insta/config", 1),  # ouvir respostas Insta360
+                ("substations/+/rovers/+/insta/connect", 1),  # ouvir respostas de conexão Insta360
+                ("substations/+/rovers/+/insta/live", 1),  # ouvir respostas de live Insta360
+                ("substations/+/rovers/+/insta/capture", 1),  # ouvir respostas de captura Insta360
             ]
             client.subscribe(topics)
             logger.info(f"Inscrito nos tópicos: {topics}")
@@ -88,28 +91,93 @@ class MQTTHandler:
                 self.handle_image_message(substation_id, rover_id, msg.payload)
             elif message_type == 'boxes':
                 self.handle_boxes_message(rover_id, msg.payload)
-            elif message_type == 'insta' and len(parts) > 5 and parts[5] == 'config':
-                # config response do dispositivo
-                try:
-                    data = json.loads(msg.payload.decode())
-                    logger.info(f"[MQTT] Resposta insta/config recebida: {data}")
-                    status_value = data.get('status')
-                    logger.info(f"[MQTT] Status da resposta insta/config: {status_value}, tipo: {type(status_value)}")
-                    
-                    # Enviar via WebSocket
-                    channel_message = {
-                        'type': 'insta_config',
-                        'data': {'status': status_value}
-                    }
-                    logger.info(f"[MQTT] Enviando para WebSocket: {channel_message}")
-                    
-                    async_to_sync(self.channel_layer.group_send)(
-                        f'rover_{rover_id}',
-                        channel_message
-                    )
-                    logger.info(f"[MQTT] Mensagem enviada para o grupo WebSocket: rover_{rover_id}")
-                except Exception as e:
-                    logger.error(f"[MQTT] Erro ao tratar resposta insta/config: {e}", exc_info=True)
+            elif message_type == 'insta' and len(parts) > 5:
+                if parts[5] == 'config':
+                    # config response do dispositivo
+                    try:
+                        data = json.loads(msg.payload.decode())
+                        logger.info(f"[MQTT] Resposta insta/config recebida: {data}")
+                        status_value = data.get('status')
+                        logger.info(f"[MQTT] Status da resposta insta/config: {status_value}, tipo: {type(status_value)}")
+
+                        # Enviar via WebSocket
+                        channel_message = {
+                            'type': 'insta_config',
+                            'data': {'status': status_value}
+                        }
+                        logger.info(f"[MQTT] Enviando para WebSocket: {channel_message}")
+
+                        async_to_sync(self.channel_layer.group_send)(
+                            f'rover_{rover_id}',
+                            channel_message
+                        )
+                        logger.info(f"[MQTT] Mensagem enviada para o grupo WebSocket: rover_{rover_id}")
+                    except Exception as e:
+                        logger.error(f"[MQTT] Erro ao tratar resposta insta/config: {e}", exc_info=True)
+                elif parts[5] == 'connect':
+                    # resposta de conexão/desconexão
+                    try:
+                        data = json.loads(msg.payload.decode())
+                        logger.info(f"[MQTT] Resposta insta/connect recebida: {data}")
+                        status_value = data.get('status')
+
+                        # Enviar via WebSocket
+                        channel_message = {
+                            'type': 'insta_connect',
+                            'data': {'status': status_value}
+                        }
+
+                        async_to_sync(self.channel_layer.group_send)(
+                            f'rover_{rover_id}',
+                            channel_message
+                        )
+                        logger.info(f"[MQTT] Mensagem de conexão enviada para WebSocket do rover {rover_id}")
+                    except Exception as e:
+                        logger.error(f"[MQTT] Erro ao tratar resposta insta/connect: {e}", exc_info=True)
+                elif parts[5] == 'live':
+                    # resposta de live
+                    try:
+                        data = json.loads(msg.payload.decode())
+                        logger.info(f"[MQTT] Resposta insta/live recebida: {data}")
+                        status_value = data.get('status')
+
+                        # Enviar via WebSocket
+                        channel_message = {
+                            'type': 'insta_live',
+                            'data': {'status': status_value}
+                        }
+
+                        async_to_sync(self.channel_layer.group_send)(
+                            f'rover_{rover_id}',
+                            channel_message
+                        )
+                        logger.info(f"[MQTT] Mensagem de live enviada para WebSocket do rover {rover_id}")
+                    except Exception as e:
+                        logger.error(f"[MQTT] Erro ao tratar resposta insta/live: {e}", exc_info=True)
+                elif parts[5] == 'capture':
+                    # resposta de captura
+                    try:
+                        data = json.loads(msg.payload.decode())
+                        logger.info(f"[MQTT] Resposta insta/capture recebida")
+                        status_value = data.get('status')
+                        image_base64 = data.get('img')
+
+                        # Enviar via WebSocket
+                        channel_message = {
+                            'type': 'insta_capture',
+                            'data': {
+                                'status': status_value,
+                                'img': image_base64
+                            }
+                        }
+
+                        async_to_sync(self.channel_layer.group_send)(
+                            f'rover_{rover_id}',
+                            channel_message
+                        )
+                        logger.info(f"[MQTT] Mensagem de captura enviada para WebSocket do rover {rover_id}")
+                    except Exception as e:
+                        logger.error(f"[MQTT] Erro ao tratar resposta insta/capture: {e}", exc_info=True)
             elif message_type == 'telemetry':
                 self.handle_telemetry_message(substation_id, rover_id, msg.payload)
             else:
@@ -313,3 +381,61 @@ class MQTTHandler:
             logger.debug(f"Notificação '{event_type}' enviada para WebSocket do rover {rover_id}")
         except Exception as e:
             logger.error(f"Erro ao notificar clientes WebSocket: {e}")
+
+    async def handle_insta_live(self, message):
+        """
+        Handler para respostas de live Insta360.
+        """
+        try:
+            logger.info(f"[MQTT] Recebido evento insta_live: {message}")
+
+            # Garantir que o status seja um número inteiro
+            data = message.copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[MQTT] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[MQTT] Não foi possível converter status para inteiro: {data['status']}")
+
+            await self.channel_layer.group_send(
+                f"rover_{self.rover_id}",
+                {
+                    "type": "insta_live",
+                    "data": data
+                }
+            )
+            logger.info(f"[MQTT] Evento insta_live enviado para o grupo rover_{self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in handle_insta_live: {e}", exc_info=True)
+
+    async def handle_insta_capture(self, message):
+        """
+        Handler para respostas de captura Insta360.
+        """
+        try:
+            logger.info(f"[MQTT] Recebido evento insta_capture: {message}")
+
+            # Garantir que o status seja um número inteiro
+            data = message.copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[MQTT] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[MQTT] Não foi possível converter status para inteiro: {data['status']}")
+
+            await self.channel_layer.group_send(
+                f"rover_{self.rover_id}",
+                {
+                    "type": "insta_capture",
+                    "data": data
+                }
+            )
+            logger.info(f"[MQTT] Evento insta_capture enviado para o grupo rover_{self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in handle_insta_capture: {e}", exc_info=True)

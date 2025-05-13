@@ -619,10 +619,10 @@ def obter_mapa(request):
 def configurar_insta360(request):
     """
     Endpoint para configurar a câmera Insta360 de um rover
-    
+
     Envia comandos de configuração via MQTT para o rover
     Tópico: /substations/{substation_id}/rovers/{rover_id}/insta/config
-    
+
     Payload esperado:
     {
         "rover_id": "ROVER001",
@@ -631,17 +631,6 @@ def configurar_insta360(request):
         "password": "senha_wifi", (opcional, requerido se ssid for fornecido)
         "rtmp": "url_rtmp" (opcional)
     }
-    
-    Validações:
-    - Pelo menos um dos campos ssid, password ou rtmp deve ser fornecido
-    - Se ssid for fornecido, password também deve ser fornecido
-    - Se password for fornecido, ssid também deve ser fornecido
-    
-    Resposta:
-    - status: 200 e message: "Configuração enviada com sucesso" se o comando for enviado
-    - Erro 400 se a requisição for inválida
-    - Erro 404 se o rover não for encontrado
-    - Erro 500 se houver erro ao enviar comando
     """
     try:
         # Extrair parâmetros da requisição
@@ -650,39 +639,39 @@ def configurar_insta360(request):
         ssid = request.data.get('ssid')
         password = request.data.get('password')
         rtmp_url = request.data.get('rtmp')
-        
+
         # Validar rover_id
         if not rover_id:
             return Response({'error': 'rover_id é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Validar que pelo menos um campo de configuração está presente
         if not any([ssid, password, rtmp_url]):
             return Response(
-                {'error': 'Pelo menos um dos campos: ssid, password ou rtmp deve ser fornecido'}, 
+                {'error': 'Pelo menos um dos campos: ssid, password ou rtmp deve ser fornecido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Validar dependência entre ssid e password
         if (ssid and not password) or (password and not ssid):
             return Response(
-                {'error': 'Se ssid for fornecido, password também deve ser fornecido e vice-versa'}, 
+                {'error': 'Se ssid for fornecido, password também deve ser fornecido e vice-versa'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Buscar o rover pelo ID
         try:
             rover = Rover.objects.get(identifier=rover_id)
-            
+
             # Se substation_id não foi fornecido, usar o do rover
             if not substation_id:
                 substation_id = rover.substation.identifier
-                
+
         except Rover.DoesNotExist:
             return Response(
-                {'error': f'Rover com ID {rover_id} não encontrado'}, 
+                {'error': f'Rover com ID {rover_id} não encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Montar o payload para o MQTT
         payload = {}
         if ssid:
@@ -691,33 +680,256 @@ def configurar_insta360(request):
             payload['password'] = password
         if rtmp_url:
             payload['rtmp'] = rtmp_url
-        
+
         # Definir o tópico MQTT
         topic = f'substations/{substation_id}/rovers/{rover_id}/insta/config'
-        
+
         # Enviar comando via MQTT
         try:
             mqtt_client = mqtt.Client()
             mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
             mqtt_client.publish(topic, json.dumps(payload))
             mqtt_client.disconnect()
-            
+
             return Response({
                 'message': 'Configuração enviada com sucesso',
                 'topic': topic,
                 'payload': payload
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"Erro ao enviar configuração MQTT: {str(e)}")
             return Response(
-                {'error': f'Erro ao enviar configuração: {str(e)}'}, 
+                {'error': f'Erro ao enviar configuração: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            
+
     except Exception as e:
         logger.error(f"Erro ao processar requisição de configuração Insta360: {str(e)}")
         return Response(
-            {'error': f'Erro interno: {str(e)}'}, 
+            {'error': f'Erro interno: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@api_view(['POST'])
+def conectar_insta360(request):
+    """
+    Endpoint para conectar/desconectar a câmera Insta360
+
+    Envia comando de conexão/desconexão via MQTT para o rover
+    Tópico: /substations/{substation_id}/rovers/{rover_id}/insta/connect
+
+    Payload esperado:
+    {
+        "rover_id": "ROVER001",
+        "substation_id": "SUB001", (opcional, será buscado se não for fornecido)
+        "connect": 0 ou 1 (0 para desconectar, 1 para conectar)
+    }
+    """
+    try:
+        # Extrair parâmetros da requisição
+        rover_id = request.data.get('rover_id')
+        substation_id = request.data.get('substation_id')
+        connect = request.data.get('connect')
+
+        # Validar parâmetros obrigatórios
+        if not rover_id:
+            return Response({'error': 'rover_id é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if connect not in [0, 1]:
+            return Response(
+                {'error': 'connect deve ser 0 (desconectar) ou 1 (conectar)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Buscar o rover pelo ID
+        try:
+            rover = Rover.objects.get(identifier=rover_id)
+
+            # Se substation_id não foi fornecido, usar o do rover
+            if not substation_id:
+                substation_id = rover.substation.identifier
+
+        except Rover.DoesNotExist:
+            return Response(
+                {'error': f'Rover com ID {rover_id} não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Montar o payload para o MQTT
+        payload = {
+            'connect': connect
+        }
+
+        # Definir o tópico MQTT
+        topic = f'substations/{substation_id}/rovers/{rover_id}/insta/connect'
+
+        # Enviar comando via MQTT
+        try:
+            mqtt_client = mqtt.Client()
+            mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+            mqtt_client.publish(topic, json.dumps(payload))
+            mqtt_client.disconnect()
+
+            return Response({
+                'message': 'Comando de conexão enviado com sucesso',
+                'topic': topic,
+                'payload': payload
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erro ao enviar comando de conexão MQTT: {str(e)}")
+            return Response(
+                {'error': f'Erro ao enviar comando de conexão: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except Exception as e:
+        logger.error(f"Erro ao processar requisição de conexão Insta360: {str(e)}")
+        return Response(
+            {'error': f'Erro interno: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+def iniciar_live_insta360(request):
+    """
+    Endpoint para iniciar/parar live da Insta360
+
+    Envia comando de live via MQTT para o rover
+    Tópico: /substations/{substation_id}/rovers/{rover_id}/insta/live
+
+    Payload esperado:
+    {
+        "rover_id": "ROVER001",
+        "substation_id": "SUB001", (opcional, será buscado se não for fornecido)
+        "live": 0 ou 1 (0 para parar, 1 para iniciar)
+    }
+
+    Respostas possíveis via WebSocket:
+    - status: 1 (live iniciado com sucesso)
+    - status: 0 (live parado com sucesso)
+    - status: -1 (erro ao iniciar/parar live)
+    """
+    try:
+        # Extrair parâmetros da requisição
+        rover_id = request.data.get('rover_id')
+        substation_id = request.data.get('substation_id')
+        live = request.data.get('live')
+
+        # Validar parâmetros obrigatórios
+        if not rover_id:
+            return Response({'error': 'rover_id é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if live not in [0, 1]:
+            return Response(
+                {'error': 'live deve ser 0 (parar) ou 1 (iniciar)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Buscar o rover pelo ID
+        try:
+            rover = Rover.objects.get(identifier=rover_id)
+
+            # Se substation_id não foi fornecido, usar o do rover
+            if not substation_id:
+                substation_id = rover.substation.identifier
+
+        except Rover.DoesNotExist:
+            return Response(
+                {'error': f'Rover com ID {rover_id} não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Montar o payload para o MQTT
+        payload = {
+            'live': live
+        }
+
+        # Definir o tópico MQTT
+        topic = f'substations/{substation_id}/rovers/{rover_id}/insta/live'
+
+        # Enviar comando via MQTT
+        try:
+            mqtt_client = mqtt.Client()
+            mqtt_client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+            mqtt_client.publish(topic, json.dumps(payload))
+            mqtt_client.disconnect()
+
+            return Response({
+                'message': 'Comando de live enviado com sucesso',
+                'topic': topic,
+                'payload': payload
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Erro ao enviar comando de live MQTT: {str(e)}")
+            return Response(
+                {'error': f'Erro ao enviar comando de live: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    except Exception as e:
+        logger.error(f"Erro ao processar requisição de live Insta360: {str(e)}")
+        return Response(
+            {'error': f'Erro interno: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+def insta_live(request, rover_id):
+    """
+    Endpoint para iniciar/parar live Insta360.
+    """
+    try:
+        logger.info(f"[API] Recebida requisição insta_live para rover {rover_id}")
+
+        # Garantir que o status seja um número inteiro
+        data = request.data.copy()
+        if 'status' in data:
+            # Converter para inteiro se for string
+            if isinstance(data['status'], str):
+                try:
+                    data['status'] = int(data['status'])
+                    logger.info(f"[API] Status convertido para inteiro: {data['status']}")
+                except (ValueError, TypeError):
+                    logger.warning(f"[API] Não foi possível converter status para inteiro: {data['status']}")
+
+        # Enviar mensagem para o MQTT
+        mqtt_client = get_mqtt_client()
+        mqtt_client.publish(f"rover/{rover_id}/insta/live", json.dumps(data))
+        logger.info(f"[API] Mensagem enviada para o MQTT: {data}")
+
+        return Response({"status": "success"})
+    except Exception as e:
+        logger.error(f"Error in insta_live: {e}", exc_info=True)
+        return Response({"status": "error", "message": str(e)}, status=500)
+
+@api_view(['POST'])
+def insta_capture(request, rover_id):
+    """
+    Endpoint para capturar foto Insta360.
+    """
+    try:
+        logger.info(f"[API] Recebida requisição insta_capture para rover {rover_id}")
+
+        # Garantir que o status seja um número inteiro
+        data = request.data.copy()
+        if 'status' in data:
+            # Converter para inteiro se for string
+            if isinstance(data['status'], str):
+                try:
+                    data['status'] = int(data['status'])
+                    logger.info(f"[API] Status convertido para inteiro: {data['status']}")
+                except (ValueError, TypeError):
+                    logger.warning(f"[API] Não foi possível converter status para inteiro: {data['status']}")
+
+        # Enviar mensagem para o MQTT
+        mqtt_client = get_mqtt_client()
+        mqtt_client.publish(f"rover/{rover_id}/insta/capture", json.dumps(data))
+        logger.info(f"[API] Mensagem enviada para o MQTT: {data}")
+
+        return Response({"status": "success"})
+    except Exception as e:
+        logger.error(f"Error in insta_capture: {e}", exc_info=True)
+        return Response({"status": "error", "message": str(e)}, status=500)

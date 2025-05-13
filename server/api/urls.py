@@ -17,7 +17,11 @@ from .views import (
     process_mapping,
     iniciar_missao,
     obter_mapa,
-    configurar_insta360
+    configurar_insta360,
+    conectar_insta360,
+    iniciar_live_insta360,
+    insta_live,
+    insta_capture
 )
 from .graph_routes import (
     get_graph_data,
@@ -46,6 +50,10 @@ urlpatterns = [
     path('iniciar-missao/', iniciar_missao, name='iniciar_missao'),
     path('obter-mapa/', obter_mapa, name='obter_mapa'),
     path('configurar-insta360/', configurar_insta360, name='configurar_insta360'),
+    path('conectar-insta360/', conectar_insta360, name='conectar_insta360'),
+    path('iniciar-live-insta360/', iniciar_live_insta360, name='iniciar_live_insta360'),
+    path('rover/<int:rover_id>/insta/live/', insta_live, name='insta_live'),
+    path('rover/<int:rover_id>/insta/capture/', insta_capture, name='insta_capture'),
     # New graph visualization endpoints
     path('graph-data/', get_graph_data, name='graph-data'),
     path('obstacles/', get_obstacles, name='obstacles'),

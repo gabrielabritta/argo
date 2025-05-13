@@ -20,6 +20,7 @@ import {
   CToast,
   CToastBody
 } from '@coreui/react'
+import '@coreui/icons/css/all.min.css'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
 import 'videojs-vr'
@@ -27,12 +28,12 @@ import { API_BASE_URL, WS_BASE_URL } from '../config'
 
 const RTMPStream360 = (props) => {
   // Extrair parâmetros das props
-  const { 
-    roverId, 
+  const {
+    roverId,
     substationId,
     streamUrl = `${import.meta.env.VITE_HLS_URL}/hls/stream.m3u8`
   } = props;
-  
+
   // Verificar se temos os IDs necessários
   useEffect(() => {
     if (!roverId || !substationId) {
@@ -47,12 +48,9 @@ const RTMPStream360 = (props) => {
   const responseReceivedRef = useRef(false)
 
   // Estado
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [fov, setFov] = useState(90)
   const [status, setStatus] = useState({ type: 'loading', message: 'Carregando...' })
-  const [projectionType, setProjectionType] = useState('equirectangular')
   const [streamAddress, setStreamAddress] = useState(streamUrl)
-  
+
   // Estado para configuração da Insta360
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [configForm, setConfigForm] = useState({
@@ -66,7 +64,11 @@ const RTMPStream360 = (props) => {
     status: null,
     message: ''
   })
-  
+  const [isInstaConnected, setIsInstaConnected] = useState(false)
+  const [isLiveActive, setIsLiveActive] = useState(false)
+  const [isLive, setIsLive] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+
   // Valores efetivos dos IDs (usando valores padrão como fallback)
   const effectiveRoverId = roverId || 'Rover-Argo-N-0';
   const effectiveSubstationId = substationId || 'SUB001';
@@ -108,36 +110,30 @@ const RTMPStream360 = (props) => {
     let player = videojs(videoPlayerRef.current, videoOptions, function onPlayerReady() {
       console.log('Player pronto', this);
       setStatus({ type: 'loading', message: 'Conectando ao stream...' });
-      
+
       // Definir metadados para o player VR
       this.mediainfo = this.mediainfo || {};
-      this.mediainfo.projection = projectionType;
-      
+      this.mediainfo.projection = 'equirectangular';
+
       // Inicializar o plugin VR
       this.vr({
-        projection: projectionType,
+        projection: 'equirectangular',
         debug: false,
         forceCardboard: false,
-        defaultFov: fov
+        defaultFov: 90
       });
-      
+
       // Eventos do player
       this.on('playing', () => {
         console.log('Vídeo em reprodução');
-        setIsPlaying(true);
         setStatus({ type: 'playing', message: 'Reproduzindo' });
       });
-      
-      this.on('pause', () => {
-        console.log('Vídeo pausado');
-        setIsPlaying(false);
-      });
-      
+
       this.on('error', (error) => {
         console.error('Erro no player:', error);
         setStatus({ type: 'error', message: 'Erro no player de vídeo' });
       });
-      
+
       // Verificar se o stream está disponível
       this.on('error', function(e) {
         if (this.error().code === 4) {
@@ -147,7 +143,7 @@ const RTMPStream360 = (props) => {
             type: 'warning',
             message: `Nenhum stream disponível. Inicie uma transmissão RTMP para ${import.meta.env.VITE_RTMP_URL}/stream`
           });
-          
+
           // Tentar novamente após 5 segundos
           setTimeout(() => {
             if (playerRef.current) {
@@ -173,68 +169,37 @@ const RTMPStream360 = (props) => {
       }
       clearTimeout(timeoutRef.current);
     };
-  }, [streamAddress, projectionType]);
-  
-  // Atualizar FOV quando mudar
-  useEffect(() => {
-    if (playerRef.current && playerRef.current.vr) {
-      try {
-        const vrPlugin = playerRef.current.vr();
-        if (vrPlugin && typeof vrPlugin.setFov === 'function') {
-          vrPlugin.setFov(fov);
-        }
-      } catch (error) {
-        console.error('Erro ao atualizar FOV:', error);
-      }
-    }
-  }, [fov]);
-
-  // Reinicializar panorama quando o tipo de projeção mudar
-  useEffect(() => {
-    console.log('Tipo de projeção alterado para:', projectionType);
-    
-    // Atualizar a projeção no player VR se ele já estiver inicializado
-    if (playerRef.current && playerRef.current.vr) {
-      try {
-        const vrPlugin = playerRef.current.vr();
-        if (vrPlugin && typeof vrPlugin.setProjection === 'function') {
-          vrPlugin.setProjection(projectionType);
-        }
-      } catch (error) {
-        console.error('Erro ao atualizar projeção:', error);
-      }
-    }
-  }, [projectionType]);
+  }, [streamAddress]);
 
   // WebSocket para respostas de configuração Insta360
   useEffect(() => {
     console.log(`Conectando WebSocket para rover ${effectiveRoverId} em ${WS_BASE_URL}/rovers/${effectiveRoverId}/`)
     const socket = new WebSocket(`${WS_BASE_URL}/rovers/${effectiveRoverId}/`)
-    
+
     socket.onopen = () => {
       console.log('WebSocket Insta360 conectado com sucesso')
     }
-    
+
     socket.onmessage = (event) => {
       try {
         console.log('WebSocket raw message received:', event.data)
         const msg = JSON.parse(event.data)
         console.log('WebSocket parsed message:', msg)
-        
+
         if (msg.type === 'insta_config') {
           console.log('Insta360 config message received:', msg.data)
           responseReceivedRef.current = true
           clearTimeout(timeoutRef.current)
-          
+
           // Garantir que o status seja tratado como número
           let status = msg.data.status
           if (typeof status === 'string') {
             status = parseInt(status, 10)
             console.log('Status convertido de string para número:', status)
           }
-          
+
           console.log('Status final para toast:', status, typeof status)
-          
+
           // Definir o toast com o status correto
           setResponseToast({
             visible: true,
@@ -243,89 +208,99 @@ const RTMPStream360 = (props) => {
               ? 'Configuração aplicada com sucesso!'
               : 'Erro ao aplicar configuração.'
           })
-          
+
           console.log('Toast configurado:', {
             visible: true,
             status: status,
             message: status === 1 ? 'Configuração aplicada com sucesso!' : 'Erro ao aplicar configuração.'
           })
+        } else if (msg.type === 'insta_connect') {
+          console.log('Insta360 connect message received:', msg.data)
+          const status = msg.data.status
+
+          // Atualizar estado de conexão
+          setIsInstaConnected(status === 1)
+
+          // Mostrar mensagem apropriada
+          let message = ''
+          switch(status) {
+            case 1:
+              message = 'Conectado com sucesso!'
+              break
+            case 0:
+              message = 'Desconectado com sucesso!'
+              break
+            case -1:
+              message = 'Rede não encontrada'
+              break
+            case -2:
+              message = 'Credenciais não configuradas'
+              break
+            case -3:
+              message = 'Erro de conexão com a Insta'
+              break
+            default:
+              message = 'Erro desconhecido'
+          }
+
+          setResponseToast({
+            visible: true,
+            status: status === 1 ? 1 : 0,
+            message: message
+          })
+        } else if (msg.type === 'insta_live') {
+          console.log('Insta360 live message received:', msg.data)
+          const status = msg.data.status
+
+          // Atualizar estado de live
+          setIsLiveActive(status === 1)
+
+          // Mostrar mensagem apropriada
+          let message = ''
+          switch(status) {
+            case 1:
+              message = 'Live iniciada com sucesso!'
+              break
+            case 0:
+              message = 'Live parada com sucesso!'
+              break
+            case -1:
+              message = 'Erro ao iniciar/parar live'
+              break
+            default:
+              message = 'Erro desconhecido'
+          }
+
+          setResponseToast({
+            visible: true,
+            status: status === 1 ? 1 : 0,
+            message: message
+          })
+        } else if (msg.type === 'insta_capture') {
+          console.log('Insta360 capture message received:', msg.data)
+          setIsCapturing(false)
         }
-      } catch (e) { 
+      } catch (e) {
         console.error('Erro ao processar mensagem WebSocket:', e)
         console.error('Dados da mensagem com erro:', event.data)
       }
     }
-    
+
     socket.onerror = (e) => {
       console.error('Erro na conexão WebSocket:', e)
     }
-    
+
     socket.onclose = (e) => {
       console.log(`WebSocket fechado com código ${e.code}, razão: ${e.reason}`)
     }
-    
-    return () => { 
+
+    return () => {
       console.log('Limpando conexão WebSocket')
       socket.close()
-      clearTimeout(timeoutRef.current) 
+      clearTimeout(timeoutRef.current)
     }
   }, [effectiveRoverId]);
 
-  // Funções de controle do player
-  const togglePlay = () => {
-    if (!playerRef.current) return;
-    
-    if (playerRef.current.paused()) {
-      playerRef.current.play();
-    } else {
-      playerRef.current.pause();
-    }
-  }
-  
-  // Reiniciar stream
-  const restartStream = () => {
-    if (!playerRef.current) return;
-    
-    setStatus({ type: 'loading', message: 'Reconectando ao stream...' });
-    
-    // Recarregar a fonte do vídeo
-    playerRef.current.src({
-      src: streamAddress,
-      type: 'application/x-mpegURL'
-    });
-    
-    playerRef.current.load();
-    playerRef.current.play().catch(error => {
-      console.error('Erro ao reproduzir vídeo após reiniciar:', error);
-    });
-  }
-  
-  // Forçar sincronização com o ao vivo (reduzir latência)
-  const syncWithLive = () => {
-    if (!playerRef.current) return;
-    
-    setStatus({ type: 'loading', message: 'Sincronizando com o ao vivo...' });
-    
-    try {
-      // Ir para o final do stream (ao vivo)
-      const duration = playerRef.current.duration();
-      if (duration && isFinite(duration) && duration > 0) {
-        playerRef.current.currentTime(duration);
-      }
-      
-      // Reproduzir
-      playerRef.current.play().then(() => {
-        setStatus({ type: 'playing', message: 'Sincronizado com o ao vivo' });
-      }).catch(error => {
-        console.error('Erro ao sincronizar:', error);
-        setStatus({ type: 'error', message: 'Erro ao sincronizar' });
-      });
-    } catch (error) {
-      console.error('Erro ao sincronizar com o ao vivo:', error);
-      setStatus({ type: 'error', message: 'Erro ao sincronizar' });
-    }
-  }
-  
   // Funções para configuração da Insta360
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -337,16 +312,16 @@ const RTMPStream360 = (props) => {
 
   const validateForm = () => {
     const errors = {}
-    
+
     // Check SSID and password dependency
     if (configForm.ssid && !configForm.password) {
       errors.password = 'Password is required when SSID is provided'
     }
-    
+
     if (configForm.password && !configForm.ssid) {
       errors.ssid = 'SSID is required when Password is provided'
     }
-    
+
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -356,36 +331,36 @@ const RTMPStream360 = (props) => {
     if (!validateForm()) {
       return;
     }
-    
+
     // Criar payload com os campos preenchidos e IDs
     const payload = {
       rover_id: effectiveRoverId,
       substation_id: effectiveSubstationId
     }
-    
+
     if (configForm.ssid) payload.ssid = configForm.ssid
     if (configForm.password) payload.password = configForm.password
     if (configForm.rtmp) payload.rtmp = configForm.rtmp
-    
+
     // Verificar se pelo menos um campo de configuração está preenchido
     if (!configForm.ssid && !configForm.password && !configForm.rtmp) {
       setFormErrors({ form: 'Pelo menos um campo deve ser preenchido' })
       return;
     }
-    
+
     // Mostrar indicador de carregamento
     setResponseToast({
       visible: true,
       status: null,
       message: 'Enviando configuração...'
     })
-    
+
     try {
       // Usar a URL relativa com API_BASE_URL do arquivo de configuração
       const apiUrl = `${API_BASE_URL || 'http://localhost:8000/api'}/configurar-insta360/`;
       console.log(`Enviando configuração para: ${apiUrl}`);
       console.log('Payload:', payload);
-      
+
       // Enviar requisição para a API do backend
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -394,10 +369,10 @@ const RTMPStream360 = (props) => {
         },
         body: JSON.stringify(payload)
       })
-      
+
       const result = await response.json()
       console.log('Resposta da API:', result);
-      
+
       if (!response.ok) {
         setResponseToast({
           visible: true,
@@ -415,7 +390,7 @@ const RTMPStream360 = (props) => {
         message: `Erro de conexão: ${error.message}`
       })
     }
-    
+
     // Iniciar timeout de resposta da câmera
     clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
@@ -427,11 +402,120 @@ const RTMPStream360 = (props) => {
         })
       }
     }, 10000)
-    
+
     // Fechar modal e resetar formulário
     setShowConfigModal(false)
     setConfigForm({ ssid: '', password: '', rtmp: '' })
   }
+
+  // Função para conectar/desconectar Insta360
+  const handleInstaConnect = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/conectar-insta360/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rover_id: effectiveRoverId,
+          substation_id: effectiveSubstationId,
+          connect: isInstaConnected ? 0 : 1
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: `Erro: ${result.error || 'Falha ao enviar comando'}`
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao enviar comando de conexão:', error)
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: `Erro de conexão: ${error.message}`
+      })
+    }
+  }
+
+  // Função para iniciar/parar live
+  const handleLiveToggle = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/iniciar-live-insta360/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rover_id: effectiveRoverId,
+          substation_id: effectiveSubstationId,
+          live: isLiveActive ? 0 : 1
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: `Erro: ${result.error || 'Falha ao enviar comando'}`
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao enviar comando de live:', error)
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: `Erro de conexão: ${error.message}`
+      })
+    }
+  }
+
+  const handleLive = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rover/${roverId}/insta/live/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: isLive ? 0 : 1
+        }),
+      });
+
+      if (response.ok) {
+        setIsLive(!isLive);
+      }
+    } catch (error) {
+      console.error('Error toggling live:', error);
+    }
+  };
+
+  const handleCapture = async () => {
+    try {
+      setIsCapturing(true);
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rover/${roverId}/insta/capture/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 1
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Error capturing photo');
+      }
+    } catch (error) {
+      console.error('Error capturing photo:', error);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   return (
     <>
@@ -459,18 +543,46 @@ const RTMPStream360 = (props) => {
           </CToast>
         )}
       </div>
-      
+
       <CCard className="mb-4">
         <CCardHeader>
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h4>Insta360 X3 - Player Stream RTMP 360°</h4>
-            <CButton
-              color="success"
-              size="sm"
-              onClick={() => setShowConfigModal(true)}
-            >
-              Configurar Insta
-            </CButton>
+            <div>
+              <CButton
+                color={isInstaConnected ? "danger" : "success"}
+                size="sm"
+                onClick={handleInstaConnect}
+                className="me-2"
+              >
+                {isInstaConnected ? "Desconectar Insta" : "Conectar Insta"}
+              </CButton>
+              <CButton
+                color={isLiveActive ? "danger" : "success"}
+                size="sm"
+                onClick={handleLiveToggle}
+                className="me-2"
+                disabled={!isInstaConnected}
+              >
+                {isLiveActive ? "Parar Live" : "Iniciar Live"}
+              </CButton>
+              <CButton
+                color="info"
+                size="sm"
+                onClick={handleCapture}
+                className="me-2"
+                disabled={!isInstaConnected || isCapturing}
+              >
+                {isCapturing ? "Capturando..." : "Capturar Imagem"}
+              </CButton>
+              <CButton
+                color="secondary"
+                size="sm"
+                onClick={() => setShowConfigModal(true)}
+              >
+                <i className="cil-cog"></i>
+              </CButton>
+            </div>
           </div>
           <div className="d-flex align-items-center">
             <CAlert color={
@@ -506,54 +618,9 @@ const RTMPStream360 = (props) => {
               />
             </div>
           </div>
-
-          <div className="mb-3">
-            <CButton color="primary" onClick={togglePlay} className="me-2">
-              <i className={`cil-${isPlaying ? 'media-pause' : 'media-play'}`}></i> {isPlaying ? 'Pausar' : 'Reproduzir'}
-            </CButton>
-            <CButton color="warning" onClick={restartStream} className="me-2">
-              <i className="cil-loop-circular"></i> Reiniciar Stream
-            </CButton>
-            <CButton color="danger" onClick={syncWithLive} className="me-2">
-              <i className="cil-speedometer"></i> Sincronizar Ao Vivo
-            </CButton>
-          </div>
-
-          <CRow className="mb-3">
-            <CCol md={6}>
-              <label htmlFor="fov-range" className="form-label">
-                Zoom / Campo de Visão: <span>{fov}°</span>
-              </label>
-              <CFormRange
-                id="fov-range"
-                min="30"
-                max="120"
-                value={fov}
-                onChange={(e) => setFov(parseInt(e.target.value))}
-              />
-            </CCol>
-          </CRow>
-
-          <CRow>
-            <CCol>
-              <CFormSelect
-                className="mb-3"
-                aria-label="Tipo de Projeção"
-                value={projectionType}
-                onChange={(e) => setProjectionType(e.target.value)}
-              >
-                <option value="equirectangular">Equiretangular (padrão)</option>
-                <option value="360">360° Esférico</option>
-                <option value="360_LR">360° Estéreo (Lado a Lado)</option>
-                <option value="360_TB">360° Estéreo (Topo/Base)</option>
-                <option value="EAC">Cubo Equi-Angular (EAC)</option>
-                <option value="fisheye">Fisheye</option>
-              </CFormSelect>
-            </CCol>
-          </CRow>
         </CCardBody>
       </CCard>
-      
+
       {/* Modal de Configuração da Insta360 */}
       <CModal visible={showConfigModal} onClose={() => setShowConfigModal(false)}>
         <CModalTitle>Configurar Câmera Insta360</CModalTitle>

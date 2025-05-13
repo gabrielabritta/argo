@@ -1,5 +1,6 @@
 import React from 'react'
 import { useSelector, useDispatch } from 'react-redux'
+import { NavLink } from 'react-router-dom'
 
 import {
   CCloseButton,
@@ -15,6 +16,7 @@ import { AppSidebarNav } from './AppSidebarNav'
 
 import { logo } from 'src/assets/brand/logo'
 import { sygnet } from 'src/assets/brand/sygnet'
+import logoArgo from '../assets/brand/logo_ARGO.png'
 
 // sidebar nav config
 import navigation from '../_nav'
@@ -36,8 +38,10 @@ const AppSidebar = () => {
       }}
     >
       <CSidebarHeader className="border-bottom">
-        <CSidebarBrand to="/" className="d-flex justify-content-center align-items-center">
-          <CIcon customClassName="sidebar-brand-full" icon={logo} height={32} />
+        <CSidebarBrand className="d-flex justify-content-center align-items-center">
+          <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center' }}>
+            <img src={logoArgo} alt="Argo Logo" style={{ height: 32, width: 'auto', cursor: 'pointer' }} />
+          </NavLink>
           <CIcon customClassName="sidebar-brand-narrow" icon={sygnet} height={32} />
         </CSidebarBrand>
         <CCloseButton

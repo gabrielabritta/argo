@@ -95,7 +95,7 @@ class RoverConsumer(AsyncWebsocketConsumer):
         """
         try:
             logger.info(f"[WebSocket] Recebido evento insta_config: {event}")
-            
+
             # Garantir que o status seja um número inteiro
             data = event['data'].copy()
             if 'status' in data:
@@ -106,14 +106,101 @@ class RoverConsumer(AsyncWebsocketConsumer):
                         logger.info(f"[WebSocket] Status convertido para inteiro: {data['status']}")
                     except (ValueError, TypeError):
                         logger.warning(f"[WebSocket] Não foi possível converter status para inteiro: {data['status']}")
-            
+
             message = {
                 'type': 'insta_config',
                 'data': data
             }
-            
+
             logger.info(f"[WebSocket] Enviando mensagem para cliente: {message}")
             await self.send(text_data=json.dumps(message))
             logger.info(f"[WebSocket] Mensagem enviada com sucesso para cliente do rover {self.rover_id}")
         except Exception as e:
             logger.error(f"Error in insta_config: {e}", exc_info=True)
+
+    async def insta_connect(self, event):
+        """
+        Handler para respostas de conexão/desconexão Insta360.
+        """
+        try:
+            logger.info(f"[WebSocket] Recebido evento insta_connect: {event}")
+
+            # Garantir que o status seja um número inteiro
+            data = event['data'].copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[WebSocket] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[WebSocket] Não foi possível converter status para inteiro: {data['status']}")
+
+            message = {
+                'type': 'insta_connect',
+                'data': data
+            }
+
+            logger.info(f"[WebSocket] Enviando mensagem para cliente: {message}")
+            await self.send(text_data=json.dumps(message))
+            logger.info(f"[WebSocket] Mensagem enviada com sucesso para cliente do rover {self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in insta_connect: {e}", exc_info=True)
+
+    async def insta_live(self, event):
+        """
+        Handler para respostas de live Insta360.
+        """
+        try:
+            logger.info(f"[WebSocket] Recebido evento insta_live: {event}")
+
+            # Garantir que o status seja um número inteiro
+            data = event['data'].copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[WebSocket] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[WebSocket] Não foi possível converter status para inteiro: {data['status']}")
+
+            message = {
+                'type': 'insta_live',
+                'data': data
+            }
+
+            logger.info(f"[WebSocket] Enviando mensagem para cliente: {message}")
+            await self.send(text_data=json.dumps(message))
+            logger.info(f"[WebSocket] Mensagem enviada com sucesso para cliente do rover {self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in insta_live: {e}", exc_info=True)
+
+    async def insta_capture(self, event):
+        """
+        Handler para respostas de captura Insta360.
+        """
+        try:
+            logger.info(f"[WebSocket] Recebido evento insta_capture")
+
+            # Garantir que o status seja um número inteiro
+            data = event['data'].copy()
+            if 'status' in data:
+                # Converter para inteiro se for string
+                if isinstance(data['status'], str):
+                    try:
+                        data['status'] = int(data['status'])
+                        logger.info(f"[WebSocket] Status convertido para inteiro: {data['status']}")
+                    except (ValueError, TypeError):
+                        logger.warning(f"[WebSocket] Não foi possível converter status para inteiro: {data['status']}")
+
+            message = {
+                'type': 'insta_capture',
+                'data': data
+            }
+
+            logger.info(f"[WebSocket] Enviando mensagem para cliente")
+            await self.send(text_data=json.dumps(message))
+            logger.info(f"[WebSocket] Mensagem enviada com sucesso para cliente do rover {self.rover_id}")
+        except Exception as e:
+            logger.error(f"Error in insta_capture: {e}", exc_info=True)

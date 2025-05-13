@@ -1,0 +1,42 @@
+.live-button,
+.capture-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 0 8px;
+}
+
+.live-button {
+    background-color: #dc3545;
+    color: white;
+}
+
+.live-button.active {
+    background-color: #28a745;
+}
+
+.capture-button {
+    background-color: #007bff;
+    color: white;
+}
+
+.capture-button.active {
+    background-color: #6c757d;
+    cursor: not-allowed;
+}
+
+.capture-button:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+}

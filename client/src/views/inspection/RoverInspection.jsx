@@ -21,7 +21,6 @@ import {
 
 // Importar os componentes existentes
 import CameraMonitoring from '../dashboard/CameraMonitoring'
-import LocationMonitoring from '../dashboard/LocationMonitoring'
 import RTMPStream360 from '../../components/RTMPStream360'
 
 const RoverInspection = () => {
@@ -32,6 +31,7 @@ const RoverInspection = () => {
   const [telemetry, setTelemetry] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [substationName, setSubstationName] = useState('')
 
   useEffect(() => {
     const fetchRoverData = async () => {
@@ -40,13 +40,18 @@ const RoverInspection = () => {
         // Buscar informações do rover
         const response = await fetch(`http://localhost:8000/api/rovers/${roverId}/`)
         const data = await response.json()
-        
+
         if (!substationId) {
           // Se não tiver substationId na URL, redirecionar para a URL correta
           navigate(`/inspect/substation/${data.substation}/rover/${roverId}`, { replace: true })
           return
         }
-        
+
+        // Buscar informações da subestação
+        const substationResponse = await fetch(`http://localhost:8000/api/substations/${substationId}/`)
+        const substationData = await substationResponse.json()
+        setSubstationName(substationData.name)
+
         setRoverInfo(data)
         setError(null)
       } catch (err) {
@@ -125,15 +130,6 @@ const RoverInspection = () => {
                 Câmera 360
               </CNavLink>
             </CNavItem>
-            <CNavItem>
-              <CNavLink
-                active={activeTab === 'location'}
-                onClick={() => setActiveTab('location')}
-                style={{ cursor: 'pointer' }}
-              >
-                Localização
-              </CNavLink>
-            </CNavItem>
           </CNav>
 
           <CTabContent>
@@ -153,7 +149,7 @@ const RoverInspection = () => {
                       </tr>
                       <tr>
                         <th>Subestação</th>
-                        <td>{roverInfo?.substation}</td>
+                        <td>{substationName}</td>
                       </tr>
                       <tr>
                         <th>Status</th>
@@ -204,10 +200,6 @@ const RoverInspection = () => {
               <CameraMonitoring roverId={roverId} substationId={substationId} />
             </CTabPane>
 
-            <CTabPane visible={activeTab === 'location'}>
-              <LocationMonitoring roverId={roverId} />
-            </CTabPane>
-            
             <CTabPane visible={activeTab === 'camera360'}>
               <RTMPStream360 roverId={roverId} substationId={substationId} />
             </CTabPane>

@@ -172,8 +172,8 @@ const SubstationInspection = () => {
   }
 
   // Função para navegar para a inspeção de um rover específico
-  const handleRoverClick = (roverId) => {
-    navigate(`/inspect/substation/${substationId}/rover/${roverId}`)
+  const handleRoverClick = (rover) => {
+    navigate(`/inspect/substation/${substationId}/rover/${rover.identifier}`)
   }
 
   // Exibir spinner enquanto carrega os dados iniciais
@@ -204,7 +204,7 @@ const SubstationInspection = () => {
                 <CCard
                   className="h-100"
                   style={{ cursor: 'pointer' }}
-                  onClick={() => handleRoverClick(rover.id)}
+                  onClick={() => handleRoverClick(rover)}
                 >
                   <CCardBody>
                     <div className="d-flex justify-content-between align-items-center mb-3">

@@ -27,6 +27,7 @@ import {
 
 import { AppBreadcrumb } from './index'
 import { AppHeaderDropdown } from './header/index'
+import logoArgo from '../assets/brand/logo_ARGO.png'
 
 const AppHeader = () => {
   const headerRef = useRef()

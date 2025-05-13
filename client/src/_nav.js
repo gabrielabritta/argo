@@ -3,7 +3,6 @@ import CIcon from '@coreui/icons-react'
 import {
   cilSpeedometer,
   cilSearch,
-  cilLocationPin,
 } from '@coreui/icons'
 import { CNavGroup, CNavItem } from '@coreui/react'
 
@@ -19,12 +18,6 @@ const _nav = [
     name: 'Seleção e Inspeção',
     to: '/selection',
     icon: <CIcon icon={cilSearch} customClassName="nav-icon" />,
-  },
-  {
-    component: CNavItem,
-    name: 'Missões',
-    to: '/missoes',
-    icon: <CIcon icon={cilLocationPin} customClassName="nav-icon" />,
   },
 ]
 
