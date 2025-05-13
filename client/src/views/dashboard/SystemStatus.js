@@ -25,6 +25,7 @@ import {
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilWarning, cilCheckCircle, cilX, cilBell, cilInfo } from '@coreui/icons'
+import { API_BASE_URL } from '../../config'
 
 const SystemStatus = () => {
   const navigate = useNavigate()
@@ -37,70 +38,54 @@ const SystemStatus = () => {
   useEffect(() => {
     const fetchRovers = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/rovers/')
+        console.log('Tentando buscar rovers em:', `${API_BASE_URL}/rovers/`);
+        const response = await fetch(`${API_BASE_URL}/rovers/`);
+        console.log('Status da resposta:', response.status);
+        
         if (!response.ok) {
-          throw new Error('Erro ao carregar rovers')
+          throw new Error(`Erro ao carregar rovers: ${response.status} ${response.statusText}`);
         }
-        const data = await response.json()
+        const data = await response.json();
+        console.log('Dados dos rovers recebidos:', data);
 
         // Transformar os dados para o formato esperado
         const formattedData = data.map(rover => ({
-          id: rover.id,
-          identifier: rover.identifier,
+          id: rover.identifier,
           name: rover.name,
-          status: rover.is_active ? 'online' : 'offline',
-          batteryLevel: Math.floor(Math.random() * 100), // Simulado
-          lastConnection: new Date().toISOString().replace('T', ' ').substring(0, 19),
-          substationId: rover.substation_identifier, // Usar o identificador da subestação em vez do ID
-          substationName: rover.substation_name,
-          sensors: {
+          status: rover.is_active ? 'operational' : 'maintenance',
+          battery: rover.battery_level || 100,
+          lastInspection: new Date().toISOString().split('T')[0],
+          substation: rover.substation_identifier || 'N/A',
+          substationName: rover.substation_name || 'N/A',
+          sensors: rover.sensors || {
             camera: 'ok',
-            gps: 'ok',
             temperature: 'ok',
-            proximity: 'ok',
+            humidity: 'ok',
+            pressure: 'ok'
           },
-          alerts: [],
-        }))
+          alerts: rover.alerts || []
+        }));
 
-        setRovers(formattedData)
-        setLoading(false)
+        console.log('Dados dos rovers formatados:', formattedData);
+        setRovers(formattedData);
+        setLoading(false);
       } catch (error) {
-        console.error('Erro ao carregar rovers:', error)
-        // Dados de fallback caso a API falhe
-        setRovers([
-          {
-            id: 6, // ID correto do rover no banco de dados
-            identifier: 'Rover-Alpha',
-            name: 'Rover Alpha',
-            status: 'online',
-            batteryLevel: 78,
-            lastConnection: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            substationId: 'SUB001', // Identificador da subestação
-            substationName: 'Subestação Principal',
-            sensors: {
-              camera: 'ok',
-              gps: 'ok',
-              temperature: 'ok',
-              proximity: 'ok',
-            },
-            alerts: [],
-          }
-        ])
-        setLoading(false)
+        console.error('Erro detalhado ao carregar rovers:', error);
+        setLoading(false);
       }
-    }
+    };
 
-    fetchRovers()
+    fetchRovers();
 
     // Simular atualizações periódicas
     const interval = setInterval(() => {
       setRovers(prevRovers => 
         prevRovers.map(rover => ({
           ...rover,
-          batteryLevel: Math.min(100, Math.max(0, rover.batteryLevel + (Math.floor(Math.random() * 3) - 1))),
-          lastConnection: rover.status === 'online' 
-            ? new Date().toISOString().replace('T', ' ').substring(0, 19)
-            : rover.lastConnection
+          battery: Math.min(100, Math.max(0, rover.battery + (Math.floor(Math.random() * 3) - 1))),
+          lastInspection: rover.status === 'operational' 
+            ? new Date().toISOString().split('T')[0]
+            : rover.lastInspection
         }))
       )
     }, 5000)
@@ -110,7 +95,7 @@ const SystemStatus = () => {
 
   // Função para navegar para a página de inspeção do rover
   const handleRoverClick = (rover) => {
-    navigate(`/inspect/substation/${rover.substationId}/rover/${rover.identifier}`)
+    navigate(`/inspect/substation/${rover.substation}/rover/${rover.id}`)
   }
 
   // Função para abrir o modal de alertas
@@ -132,16 +117,8 @@ const SystemStatus = () => {
           rover.id === roverId
             ? {
                 ...rover,
-                status: 'online',
-                lastConnection: new Date().toISOString().replace('T', ' ').substring(0, 19),
-                alerts: [
-                  {
-                    type: 'info',
-                    message: 'Conexão restabelecida',
-                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-                  },
-                  ...rover.alerts,
-                ],
+                status: 'operational',
+                lastInspection: new Date().toISOString().split('T')[0],
               }
             : rover,
         ),
@@ -152,10 +129,8 @@ const SystemStatus = () => {
   // Função para renderizar o status com cores apropriadas
   const renderStatus = (status) => {
     switch (status) {
-      case 'online':
-        return <CBadge color="success">Online</CBadge>
-      case 'offline':
-        return <CBadge color="danger">Offline</CBadge>
+      case 'operational':
+        return <CBadge color="success">Operacional</CBadge>
       case 'maintenance':
         return <CBadge color="warning">Manutenção</CBadge>
       default:
@@ -205,8 +180,9 @@ const SystemStatus = () => {
                       <CTableHeaderCell scope="col">Rover</CTableHeaderCell>
                       <CTableHeaderCell scope="col">Status</CTableHeaderCell>
                       <CTableHeaderCell scope="col">Bateria</CTableHeaderCell>
-                      <CTableHeaderCell scope="col">Última Conexão</CTableHeaderCell>
                       <CTableHeaderCell scope="col">Sensores</CTableHeaderCell>
+                      <CTableHeaderCell scope="col">Última Inspeção</CTableHeaderCell>
+                      <CTableHeaderCell scope="col">Subestação</CTableHeaderCell>
                       <CTableHeaderCell scope="col">Alertas</CTableHeaderCell>
                       <CTableHeaderCell scope="col">Ações</CTableHeaderCell>
                     </CTableRow>
@@ -225,46 +201,36 @@ const SystemStatus = () => {
                             <CProgress
                               thin
                               className="flex-grow-1 me-2"
-                              color={getBatteryColor(rover.batteryLevel)}
-                              value={rover.batteryLevel}
+                              color={getBatteryColor(rover.battery)}
+                              value={rover.battery}
                             />
-                            <div className="small text-medium-emphasis">{rover.batteryLevel}%</div>
+                            <div className="small text-medium-emphasis">{rover.battery}%</div>
                           </div>
                         </CTableDataCell>
-                        <CTableDataCell>{rover.lastConnection}</CTableDataCell>
                         <CTableDataCell>
                           <div className="d-flex gap-2">
                             <div title="Câmera">{renderSensorStatus(rover.sensors.camera)}</div>
-                            <div title="GPS">{renderSensorStatus(rover.sensors.gps)}</div>
                             <div title="Temperatura">{renderSensorStatus(rover.sensors.temperature)}</div>
-                            <div title="Proximidade">{renderSensorStatus(rover.sensors.proximity)}</div>
+                            <div title="Umidade">{renderSensorStatus(rover.sensors.humidity)}</div>
+                            <div title="Pressão">{renderSensorStatus(rover.sensors.pressure)}</div>
                           </div>
                         </CTableDataCell>
+                        <CTableDataCell>{rover.lastInspection}</CTableDataCell>
+                        <CTableDataCell>{rover.substationName}</CTableDataCell>
                         <CTableDataCell>
-                          {rover.alerts.length > 0 ? (
-                            <CBadge 
-                              color={rover.alerts[0].type === 'error' ? 'danger' : 'warning'}
-                              style={{ cursor: 'pointer' }}
-                              onClick={(e) => handleAlertsClick(e, rover)}
-                            >
-                              <CIcon icon={cilBell} className="me-1" />
-                              {rover.alerts.length} {rover.alerts.length === 1 ? 'alerta' : 'alertas'}
-                            </CBadge>
-                          ) : (
-                            <CBadge 
-                              color="info" 
-                              style={{ cursor: 'pointer' }}
-                              onClick={(e) => handleAlertsClick(e, rover)}
-                            >
-                              <CIcon icon={cilInfo} className="me-1" />
-                              Sistema normal
-                            </CBadge>
-                          )}
+                          <CButton
+                            color="primary"
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleAlertsClick(e, rover)}
+                          >
+                            <CIcon icon={cilBell} />
+                          </CButton>
                         </CTableDataCell>
                         <CTableDataCell>
-                          {rover.status === 'offline' ? (
+                          {rover.status === 'maintenance' && (
                             <CButton
-                              color="primary"
+                              color="success"
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -273,18 +239,18 @@ const SystemStatus = () => {
                             >
                               Reconectar
                             </CButton>
-                          ) : (
-                            <CButton
-                              color="success"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRoverClick(rover);
-                              }}
-                            >
-                              Inspecionar
-                            </CButton>
                           )}
+                          <CButton
+                            color="primary"
+                            size="sm"
+                            className="ms-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRoverClick(rover);
+                            }}
+                          >
+                            Inspecionar
+                          </CButton>
                         </CTableDataCell>
                       </CTableRow>
                     ))}
@@ -305,7 +271,7 @@ const SystemStatus = () => {
             </CModalTitle>
           </CModalHeader>
           <CModalBody>
-            {selectedRover && selectedRover.alerts.length > 0 ? (
+            {selectedRover && selectedRover.alerts && selectedRover.alerts.length > 0 ? (
               <>
                 <p className="text-medium-emphasis mb-4">
                   Listagem de alertas ativos para o rover {selectedRover.name}. Os alertas são ordenados do mais recente para o mais antigo.

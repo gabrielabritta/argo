@@ -20,4 +20,4 @@ class RoverSerializer(serializers.ModelSerializer):
 class SubstationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Substation
-        fields = '__all__'
+        fields = ['id', 'name', 'identifier', 'latitude', 'longitude', 'is_active', 'description', 'voltage', 'created_at']

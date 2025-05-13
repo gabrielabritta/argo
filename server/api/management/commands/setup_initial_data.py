@@ -7,19 +7,24 @@ class Command(BaseCommand):
     help = "Setup initial data for the rover application"
 
     def handle(self, *args, **kwargs):
-        # Criar Substation inicial (apenas Parnaíba)
+        # Criar ou atualizar Substation inicial (apenas Parnaíba)
         substation, created = Substation.objects.get_or_create(
             identifier="SUB001",
             defaults={
-                "name": "Subestação Parnaíba",
+                "name": "SE Parnaíba III",
+                "description": "Tensão: 500 kV",
                 "latitude": -3.1230245597847435,  # Parnaíba
                 "longitude": -41.76592329781182,  # Parnaíba
                 "is_active": True
             }
         )
+        # Atualizar nome e descrição mesmo se já existir
+        substation.name = "SE Parnaíba III"
+        substation.description = "Tensão: 500 kV"
+        substation.save()
 
         self.stdout.write(
-            self.style.SUCCESS(f"{'Created' if created else 'Found'} substation: {substation.name}")
+            self.style.SUCCESS(f"{'Created' if created else 'Updated'} substation: {substation.name}")
         )
 
         # Criar apenas o Rover Alpha para a subestação

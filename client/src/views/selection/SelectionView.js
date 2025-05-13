@@ -11,6 +11,7 @@ import {
   CSpinner
 } from '@coreui/react';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../config';
 
 const SelectionView = () => {
   const [selectedSubstation, setSelectedSubstation] = useState('');
@@ -33,7 +34,7 @@ const SelectionView = () => {
     const fetchSubstations = async () => {
       setLoadingSubstations(true);
       try {
-        const response = await fetch('http://localhost:8000/api/substations/');
+        const response = await fetch(`${API_BASE_URL}/substations/`);
         if (!response.ok) {
           throw new Error(`Erro ${response.status}: Não foi possível carregar subestações.`);
         }
@@ -61,7 +62,7 @@ const SelectionView = () => {
     const fetchRovers = async () => {
       setLoadingRovers(true);
       try {
-        const response = await fetch(`http://localhost:8000/api/rovers/?substation=${selectedSubstation}`);
+        const response = await fetch(`${API_BASE_URL}/rovers/?substation=${selectedSubstation}`);
         if (!response.ok) {
           throw new Error(`Erro ${response.status}: Não foi possível carregar rovers.`);
         }

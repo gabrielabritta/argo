@@ -19,6 +19,7 @@ import {
 } from '@coreui/react'
 import CIcon from '@coreui/icons-react'
 import { cilRobot, cilLocationPin, cilCameraControl, cilBattery5, cilWarning } from '@coreui/icons'
+import { API_BASE_URL } from '../../config'
 
 const SubstationDetails = () => {
   const { substationId } = useParams()
@@ -32,7 +33,7 @@ const SubstationDetails = () => {
     const fetchSubstationDetails = async () => {
       try {
         // Buscar dados da subestação
-        const subResponse = await fetch(`http://localhost:8000/api/substations/${substationId}/`)
+        const subResponse = await fetch(`${API_BASE_URL}/substations/${substationId}/`)
         if (!subResponse.ok) {
           throw new Error('Erro ao buscar dados da subestação')
         }
@@ -40,7 +41,7 @@ const SubstationDetails = () => {
         setSubstation(subData)
 
         // Buscar rovers da subestação
-        const roversResponse = await fetch(`http://localhost:8000/api/rovers/?substation=${substationId}`)
+        const roversResponse = await fetch(`${API_BASE_URL}/rovers/?substation=${substationId}`)
         if (!roversResponse.ok) {
           throw new Error('Erro ao buscar dados dos rovers')
         }

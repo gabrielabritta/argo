@@ -7,6 +7,8 @@ class Substation(models.Model):
     longitude = models.FloatField(default=-46.633308)  # São Paulo como padrão
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    description = models.CharField(max_length=200, blank=True, default="")
+    voltage = models.CharField(max_length=20, default="500kV")
 
     def __str__(self):
         return f"{self.name} ({self.identifier})"

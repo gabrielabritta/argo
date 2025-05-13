@@ -18,6 +18,7 @@ import {
   CProgress,
   CBadge,
 } from '@coreui/react'
+import { API_BASE_URL } from '../../config'
 
 // Importar os componentes existentes
 import CameraMonitoring from '../dashboard/CameraMonitoring'
@@ -38,7 +39,7 @@ const RoverInspection = () => {
       setLoading(true)
       try {
         // Buscar informações do rover
-        const response = await fetch(`http://localhost:8000/api/rovers/${roverId}/`)
+        const response = await fetch(`${API_BASE_URL}/rovers/${roverId}/`)
         const data = await response.json()
 
         if (!substationId) {
@@ -48,7 +49,7 @@ const RoverInspection = () => {
         }
 
         // Buscar informações da subestação
-        const substationResponse = await fetch(`http://localhost:8000/api/substations/${substationId}/`)
+        const substationResponse = await fetch(`${API_BASE_URL}/substations/${substationId}/`)
         const substationData = await substationResponse.json()
         setSubstationName(substationData.name)
 
@@ -68,7 +69,7 @@ const RoverInspection = () => {
   useEffect(() => {
     const fetchTelemetry = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/sensor-data/?rover=${roverId}`)
+        const response = await fetch(`${API_BASE_URL}/sensor-data/?rover=${roverId}`)
         const data = await response.json()
         setTelemetry(data)
       } catch (err) {

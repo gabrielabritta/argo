@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { CCard, CCardBody, CCardHeader, CSpinner, CButton, CTooltip } from '@coreui/react';
 import CIcon from '@coreui/icons-react';
 import { cilCheckCircle, cilWarning, cilLocationPin } from '@coreui/icons';
-import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, ImageOverlay, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { API_BASE_URL } from '../../config';
 
 // Corrigir o problema de ícones do Leaflet
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -60,28 +61,43 @@ const SubstationMap = () => {
   useEffect(() => {
     const fetchSubstations = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/substations/');
+        console.log('Tentando buscar subestações em:', `${API_BASE_URL}/substations/`);
+        const response = await fetch(`${API_BASE_URL}/substations/`);
+        console.log('Status da resposta:', response.status);
+        
         if (!response.ok) {
-          throw new Error('Erro ao carregar subestações');
+          throw new Error(`Erro ao carregar subestações: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
+        console.log('Dados recebidos da API:', data);
+
+        // Logar cada subestação recebida
+        data.forEach((sub, idx) => {
+          console.log(`API substation[${idx}]:`, sub);
+        });
 
         // Transformar os dados para o formato esperado pelo mapa
         const formattedData = data.map(substation => ({
           id: substation.identifier,
           name: substation.name,
-          coordinates: [substation.latitude, substation.longitude],
+          description: substation.description || '',
+          coordinates: [parseFloat(substation.latitude), parseFloat(substation.longitude)],
           status: substation.is_active ? 'operational' : 'maintenance',
-          voltage: '500kV', // Valor padrão
+          voltage: substation.voltage,
           rovers: substation.rovers?.length || 0,
-          lastInspection: new Date().toISOString().split('T')[0], // Data atual como exemplo
-          state: 'SP' // Estado padrão
+          lastInspection: new Date().toISOString().split('T')[0],
+          state: 'SP'
         }));
+
+        // Logar cada subestação formatada
+        formattedData.forEach((sub, idx) => {
+          console.log(`Formatted substation[${idx}]:`, sub);
+        });
 
         setSubstations(formattedData);
         setLoading(false);
       } catch (error) {
-        console.error('Erro ao carregar subestações:', error);
+        console.error('Erro detalhado ao carregar subestações:', error);
         setLoading(false);
       }
     };
@@ -91,34 +107,6 @@ const SubstationMap = () => {
 
   const handleSubstationClick = (substationId) => {
     navigate(`/inspect/substation/${substationId}`);
-  };
-
-  // Determina o ícone com base no status (mantendo a consistência com o original)
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'operational':
-        return <CIcon icon={cilCheckCircle} className="text-white" />;
-      case 'maintenance':
-        return <CIcon icon={cilWarning} className="text-white" />;
-      case 'alert':
-        return <CIcon icon={cilWarning} className="text-white" />;
-      default:
-        return <CIcon icon={cilLocationPin} className="text-white" />;
-    }
-  };
-
-  // Determina a cor do marcador com base no status (mantendo a consistência)
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'operational':
-        return 'success';
-      case 'maintenance':
-        return 'warning';
-      case 'alert':
-        return 'danger';
-      default:
-        return 'primary';
-    }
   };
 
   return (
@@ -143,9 +131,8 @@ const SubstationMap = () => {
               maxZoom={10}
               scrollWheelZoom={true}
             >
-              {/* Mapa base */}
               <TileLayer
-                attribution='&copy; <a href="[https://www.openstreetmap.org/copyright">OpenStreetMap</a>](https://www.openstreetmap.org/copyright">OpenStreetMap</a>) contributors'
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
@@ -156,7 +143,6 @@ const SubstationMap = () => {
                 opacity={0.5}
               />
 
-              {/* Marcadores das subestações */}
               {substations.map((substation) => (
                 <Marker
                   key={substation.id}
@@ -166,25 +152,62 @@ const SubstationMap = () => {
                     click: () => handleSubstationClick(substation.id)
                   }}
                 >
+                  <Tooltip 
+                    direction="top" 
+                    offset={[0, -10]} 
+                    opacity={0.9}
+                    permanent={false}
+                    sticky={true}
+                  >
+                    <div className="text-center">
+                      <strong>{substation.name}</strong>
+                      <br />
+                      <small className="text-muted">
+                        {substation.status === 'operational' ? 'Operacional' : 'Em Manutenção'}
+                      </small>
+                      {substation.voltage && (
+                        <>
+                          <br />
+                          <small className="text-muted">
+                            Tensão: {substation.voltage && substation.voltage.toString().toLowerCase().includes('kv') 
+                              ? substation.voltage 
+                              : `${substation.voltage} kV`}
+                          </small>
+                        </>
+                      )}
+                      {(substation.description && !substation.description.toLowerCase().includes('tensão')) && (
+                        <>
+                          <br />
+                          <small className="text-muted">
+                            {substation.description}
+                          </small>
+                        </>
+                      )}
+                    </div>
+                  </Tooltip>
                   <Popup>
                     <div style={{ width: '250px' }}>
                       <h5 className="text-primary">{substation.name}</h5>
                       <p>
                         <strong>Status:</strong>{' '}
-                        <span className={`text-${getStatusColor(substation.status)}`}>
-                          {substation.status === 'operational'
-                            ? 'Operacional'
-                            : substation.status === 'maintenance'
-                            ? 'Em Manutenção'
-                            : 'Alerta'}
+                        <span className={`text-${substation.status === 'operational' ? 'success' : 'warning'}`}>
+                          {substation.status === 'operational' ? 'Operacional' : 'Em Manutenção'}
                         </span>
+                        {substation.description ? <span className="ms-2">| {substation.description}</span> : null}
+                      </p>
+                      <p>
+                        <strong>Descrição:</strong> {substation.description}
                       </p>
                       <p>
                         <strong>Estado:</strong> {substation.state}
                       </p>
-                      <p>
-                        <strong>Tensão:</strong> {substation.voltage}
-                      </p>
+                      {substation.voltage && (
+                        <p>
+                          <strong>Tensão:</strong> {substation.voltage && substation.voltage.toString().toLowerCase().includes('kv') 
+                            ? substation.voltage 
+                            : `${substation.voltage} kV`}
+                        </p>
+                      )}
                       <p>
                         <strong>Rovers:</strong> {substation.rovers}
                       </p>
@@ -205,7 +228,6 @@ const SubstationMap = () => {
               ))}
             </MapContainer>
 
-            {/* Legenda de cores - mantida igual ao original */}
             <div
               className="position-absolute bottom-0 start-0 p-2 bg-white bg-opacity-75 rounded m-2"
               style={{ zIndex: 1000 }}
