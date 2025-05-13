@@ -439,3 +439,15 @@ class MQTTHandler:
             logger.info(f"[MQTT] Evento insta_capture enviado para o grupo rover_{self.rover_id}")
         except Exception as e:
             logger.error(f"Error in handle_insta_capture: {e}", exc_info=True)
+
+def get_mqtt_client():
+    """
+    Retorna uma instância do cliente MQTT para uso em views
+    """
+    client = mqtt.Client()
+    try:
+        client.connect(settings.MQTT_HOST, settings.MQTT_PORT, 60)
+        return client
+    except Exception as e:
+        logger.error(f"Erro ao conectar ao MQTT: {e}")
+        raise

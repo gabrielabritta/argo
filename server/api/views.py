@@ -21,6 +21,7 @@ import requests
 from .models import Rover, Substation, RoverTelemetry
 from .mapping_manager import MapManager
 from .serializers import RoverSerializer, SubstationSerializer
+from .mqtt_handler import get_mqtt_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class RoverViewSet(viewsets.ModelViewSet):
         if substation_id:
             queryset = queryset.filter(substation__identifier=substation_id)
 
-        return queryset.filter(is_active=True)
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """
@@ -913,6 +914,16 @@ def insta_capture(request, rover_id):
     try:
         logger.info(f"[API] Recebida requisição insta_capture para rover {rover_id}")
 
+        # Buscar o rover para obter a substation_id
+        try:
+            rover = Rover.objects.get(identifier=rover_id)
+            substation_id = rover.substation.identifier
+        except Rover.DoesNotExist:
+            return Response(
+                {'error': f'Rover com ID {rover_id} não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         # Garantir que o status seja um número inteiro
         data = request.data.copy()
         if 'status' in data:
@@ -926,7 +937,8 @@ def insta_capture(request, rover_id):
 
         # Enviar mensagem para o MQTT
         mqtt_client = get_mqtt_client()
-        mqtt_client.publish(f"rover/{rover_id}/insta/capture", json.dumps(data))
+        topic = f"substations/{substation_id}/rovers/{rover_id}/insta/capture"
+        mqtt_client.publish(topic, json.dumps(data))
         logger.info(f"[API] Mensagem enviada para o MQTT: {data}")
 
         return Response({"status": "success"})

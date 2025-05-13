@@ -38,9 +38,9 @@ const createStatusIcon = (status) => {
 
   return L.divIcon({
     className: 'custom-div-icon',
-    html: `<div style="background-color: ${color}; width: 36px; height: 36px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
+    html: `<div style="background-color: ${color}; width: 26px; height: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13]
   });
 };
 

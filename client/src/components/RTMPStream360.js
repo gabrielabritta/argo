@@ -24,6 +24,7 @@ import '@coreui/icons/css/all.min.css'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
 import 'videojs-vr'
+import * as THREE from 'three'
 import { API_BASE_URL, WS_BASE_URL } from '../config'
 
 const RTMPStream360 = (props) => {
@@ -68,6 +69,11 @@ const RTMPStream360 = (props) => {
   const [isLiveActive, setIsLiveActive] = useState(false)
   const [isLive, setIsLive] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [showCapturedImage, setShowCapturedImage] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const imagePlayerRef = useRef(null);
+  const imagePlayerInstanceRef = useRef(null);
 
   // Valores efetivos dos IDs (usando valores padrão como fallback)
   const effectiveRoverId = roverId || 'Rover-Argo-N-0';
@@ -277,8 +283,34 @@ const RTMPStream360 = (props) => {
             message: message
           })
         } else if (msg.type === 'insta_capture') {
-          console.log('Insta360 capture message received:', msg.data)
-          setIsCapturing(false)
+          console.log('Insta360 capture message received:', msg.data);
+          
+          // Verificar se é a primeira mensagem (confirmação do comando)
+          if (!msg.data.image) {
+            console.log('Confirmação de comando de captura recebida');
+            // Não resetamos isCapturing aqui, pois ainda estamos esperando a imagem
+            return;
+          }
+          
+          // Se chegou aqui, é a mensagem com a imagem
+          console.log('Imagem base64 recebida, tamanho:', msg.data.image.length);
+          
+          // Limpar o timeout se existir
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+          
+          setIsCapturing(false);
+          setCapturedImage(msg.data.image);
+          setShowImageModal(true);
+          
+          // Mostrar toast de sucesso
+          setResponseToast({
+            visible: true,
+            status: 1,
+            message: 'Imagem capturada com sucesso!'
+          });
         }
       } catch (e) {
         console.error('Erro ao processar mensagem WebSocket:', e)
@@ -300,6 +332,55 @@ const RTMPStream360 = (props) => {
       clearTimeout(timeoutRef.current)
     }
   }, [effectiveRoverId]);
+
+  // Adicionar após o useEffect do WebSocket
+  useEffect(() => {
+    if (showImageModal && capturedImage) {
+      console.log('Inicializando player de imagem 360°');
+      
+      // Configurações do player para a imagem
+      const imageOptions = {
+        autoplay: true,
+        controls: true,
+        responsive: true,
+        fluid: true,
+        sources: [{
+          src: `data:image/jpeg;base64,${capturedImage}`,
+          type: 'image/jpeg'
+        }],
+        html5: {
+          vhs: {
+            overrideNative: true
+          }
+        }
+      };
+
+      // Inicializar o player de imagem
+      let player = videojs(imagePlayerRef.current, imageOptions, function onPlayerReady() {
+        console.log('Player de imagem pronto');
+        
+        // Configurar VR para a imagem
+        this.mediainfo = this.mediainfo || {};
+        this.mediainfo.projection = 'equirectangular';
+        
+        this.vr({
+          projection: 'equirectangular',
+          debug: false,
+          forceCardboard: false,
+          defaultFov: 90
+        });
+      });
+
+      imagePlayerInstanceRef.current = player;
+
+      return () => {
+        if (imagePlayerInstanceRef.current) {
+          imagePlayerInstanceRef.current.dispose();
+          imagePlayerInstanceRef.current = null;
+        }
+      };
+    }
+  }, [showImageModal, capturedImage]);
 
   // Funções para configuração da Insta360
   const handleInputChange = (e) => {
@@ -476,7 +557,7 @@ const RTMPStream360 = (props) => {
 
   const handleLive = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rover/${roverId}/insta/live/`, {
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rovers/${roverId}/insta/live/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -496,24 +577,66 @@ const RTMPStream360 = (props) => {
 
   const handleCapture = async () => {
     try {
+      console.log('Iniciando captura de imagem...');
       setIsCapturing(true);
-      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rover/${roverId}/insta/capture/`, {
+      
+      // Mostrar toast de "aguardando"
+      setResponseToast({
+        visible: true,
+        status: null,
+        message: 'Aguardando captura da imagem...'
+      });
+      
+      const response = await fetch(`${API_BASE_URL || 'http://localhost:8000/api'}/rovers/${roverId}/insta/capture/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          status: 1
+          capture: 1
         }),
       });
 
       if (!response.ok) {
-        console.error('Error capturing photo');
+        console.error('Erro na captura:', response.statusText);
+        setIsCapturing(false);
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: 'Erro ao capturar imagem'
+        });
+      } else {
+        console.log('Comando de captura enviado com sucesso, aguardando imagem...');
+        
+        // Configurar timeout de 15 segundos
+        timeoutRef.current = setTimeout(() => {
+          if (isCapturing) {
+            console.log('Timeout atingido - imagem não recebida');
+            setIsCapturing(false);
+            setResponseToast({
+              visible: true,
+              status: 0,
+              message: 'Tempo limite excedido - Imagem não recebida'
+            });
+          }
+        }, 15000);
       }
     } catch (error) {
-      console.error('Error capturing photo:', error);
-    } finally {
+      console.error('Erro ao capturar imagem:', error);
       setIsCapturing(false);
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: `Erro de conexão: ${error.message}`
+      });
+    }
+  };
+
+  const handleCloseImageModal = () => {
+    setShowImageModal(false);
+    if (imagePlayerInstanceRef.current) {
+      imagePlayerInstanceRef.current.dispose();
+      imagePlayerInstanceRef.current = null;
     }
   };
 
@@ -562,7 +685,7 @@ const RTMPStream360 = (props) => {
                 size="sm"
                 onClick={handleLiveToggle}
                 className="me-2"
-                disabled={!isInstaConnected}
+                disabled={!isInstaConnected || showCapturedImage}
               >
                 {isLiveActive ? "Parar Live" : "Iniciar Live"}
               </CButton>
@@ -571,10 +694,31 @@ const RTMPStream360 = (props) => {
                 size="sm"
                 onClick={handleCapture}
                 className="me-2"
-                disabled={!isInstaConnected || isCapturing}
+                disabled={!isInstaConnected || isCapturing || isLiveActive}
               >
                 {isCapturing ? "Capturando..." : "Capturar Imagem"}
               </CButton>
+              {showCapturedImage && (
+                <CButton
+                  color="warning"
+                  size="sm"
+                  onClick={() => {
+                    setShowCapturedImage(false)
+                    setCapturedImage(null)
+                    // Restaurar o stream ao player
+                    if (playerRef.current) {
+                      playerRef.current.src({
+                        src: streamAddress,
+                        type: 'application/x-mpegURL'
+                      })
+                      playerRef.current.load()
+                    }
+                  }}
+                  className="me-2"
+                >
+                  Voltar para Live
+                </CButton>
+              )}
               <CButton
                 color="secondary"
                 size="sm"
@@ -679,6 +823,42 @@ const RTMPStream360 = (props) => {
           </CButton>
           <CButton color="primary" onClick={handleSubmit}>
             Enviar Configuração
+          </CButton>
+        </CModalFooter>
+      </CModal>
+
+      {/* Modal para exibir imagem 360° */}
+      <CModal 
+        visible={showImageModal} 
+        onClose={handleCloseImageModal}
+        size="xl"
+      >
+        <CModalTitle>Imagem 360° Capturada</CModalTitle>
+        <CModalBody>
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            height: '0',
+            paddingBottom: '56.25%',
+            backgroundColor: '#000',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            <div style={{ width: '100%', height: '100%', position: 'absolute' }}>
+              <video
+                ref={imagePlayerRef}
+                className="video-js vjs-default-skin vjs-big-play-centered"
+                crossOrigin="anonymous"
+                controls
+                playsInline
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
+          </div>
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={handleCloseImageModal}>
+            Fechar
           </CButton>
         </CModalFooter>
       </CModal>

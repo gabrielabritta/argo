@@ -23,6 +23,9 @@ class Rover(models.Model):
     name = models.CharField(max_length=200)
     model = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
+    battery_level = models.FloatField(default=100)
+    sensors = models.JSONField(default=dict)
+    alerts = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

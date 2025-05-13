@@ -228,7 +228,7 @@ const SystemStatus = () => {
                           </CButton>
                         </CTableDataCell>
                         <CTableDataCell>
-                          {rover.status === 'maintenance' && (
+                          {rover.status === 'maintenance' ? (
                             <CButton
                               color="success"
                               size="sm"
@@ -239,18 +239,18 @@ const SystemStatus = () => {
                             >
                               Reconectar
                             </CButton>
+                          ) : (
+                            <CButton
+                              color="primary"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRoverClick(rover);
+                              }}
+                            >
+                              Inspecionar
+                            </CButton>
                           )}
-                          <CButton
-                            color="primary"
-                            size="sm"
-                            className="ms-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRoverClick(rover);
-                            }}
-                          >
-                            Inspecionar
-                          </CButton>
                         </CTableDataCell>
                       </CTableRow>
                     ))}

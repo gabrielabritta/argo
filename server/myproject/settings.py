@@ -186,6 +186,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://192.168.100.117",
+    "http://192.168.0.149",
     "http://www.grinlab.site",
     "http://146.235.30.249",
     "https://www.grinlab.site",

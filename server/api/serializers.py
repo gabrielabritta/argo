@@ -7,7 +7,7 @@ class RoverSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rover
-        fields = ['id', 'name', 'identifier', 'model', 'is_active', 'substation', 'substation_identifier']
+        fields = ['id', 'name', 'identifier', 'model', 'is_active', 'substation', 'substation_identifier', 'battery_level', 'sensors', 'alerts']
 
     def to_representation(self, instance):
         """

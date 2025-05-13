@@ -53,7 +53,7 @@ urlpatterns = [
     path('conectar-insta360/', conectar_insta360, name='conectar_insta360'),
     path('iniciar-live-insta360/', iniciar_live_insta360, name='iniciar_live_insta360'),
     path('rover/<int:rover_id>/insta/live/', insta_live, name='insta_live'),
-    path('rover/<int:rover_id>/insta/capture/', insta_capture, name='insta_capture'),
+    path('rovers/<str:rover_id>/insta/capture/', insta_capture, name='insta_capture'),
     # New graph visualization endpoints
     path('graph-data/', get_graph_data, name='graph-data'),
     path('obstacles/', get_obstacles, name='obstacles'),
