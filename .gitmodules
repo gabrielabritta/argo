@@ -1,9 +1,15 @@
 [submodule "RoverModel"]
 	path = RoverModel
 	url = https://github.com/lmhonorio/RoverModel
+	ignore = dirty
+	ignore = untracked
 [submodule "360-Viwer"]
 	path = 360-Viwer
 	url = https://github.com/livebloggerofficial/360-Degree-Image-Viewer.git
+	ignore = dirty
+	ignore = untracked
 [submodule "360-Viewer"]
 	path = 360-Viewer
 	url = https://github.com/livebloggerofficial/360-Degree-Image-Viewer
+	ignore = dirty
+	ignore = untracked
