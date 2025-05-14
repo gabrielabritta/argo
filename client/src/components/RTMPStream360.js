@@ -27,6 +27,33 @@ import 'videojs-vr'
 import * as THREE from 'three'
 import { API_BASE_URL, WS_BASE_URL } from '../config'
 
+// Adicionar script Pannellum para visualização alternativa
+const loadPannellum = () => {
+  return new Promise((resolve, reject) => {
+    // Verificar se já foi carregado
+    if (window.pannellum) {
+      resolve(window.pannellum);
+      return;
+    }
+
+    // Carregar o CSS
+    const linkElement = document.createElement('link');
+    linkElement.rel = 'stylesheet';
+    linkElement.href = 'https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css';
+    document.head.appendChild(linkElement);
+
+    // Carregar o JS
+    const scriptElement = document.createElement('script');
+    scriptElement.src = 'https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js';
+    scriptElement.async = true;
+    
+    scriptElement.onload = () => resolve(window.pannellum);
+    scriptElement.onerror = (error) => reject(error);
+    
+    document.head.appendChild(scriptElement);
+  });
+};
+
 const RTMPStream360 = (props) => {
   // Extrair parâmetros das props
   const {
@@ -47,10 +74,18 @@ const RTMPStream360 = (props) => {
   const playerRef = useRef(null)
   const timeoutRef = useRef(null)
   const responseReceivedRef = useRef(false)
+  const imagePlayerRef = useRef(null);
+  const imagePlayerInstanceRef = useRef(null);
+  const regularImageRef = useRef(null);
+  const modalRenderedRef = useRef(false);
+  const pannellumContainerRef = useRef(null);
+  const pannellumViewerRef = useRef(null);
 
   // Estado
   const [status, setStatus] = useState({ type: 'loading', message: 'Carregando...' })
   const [streamAddress, setStreamAddress] = useState(streamUrl)
+  const [usePannellum, setUsePannellum] = useState(true);
+  const [pannellumLoaded, setPannellumLoaded] = useState(false);
 
   // Estado para configuração da Insta360
   const [showConfigModal, setShowConfigModal] = useState(false)
@@ -72,8 +107,6 @@ const RTMPStream360 = (props) => {
   const [capturedImage, setCapturedImage] = useState(null);
   const [showCapturedImage, setShowCapturedImage] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
-  const imagePlayerRef = useRef(null);
-  const imagePlayerInstanceRef = useRef(null);
 
   // Valores efetivos dos IDs (usando valores padrão como fallback)
   const effectiveRoverId = roverId || 'Rover-Argo-N-0';
@@ -191,6 +224,12 @@ const RTMPStream360 = (props) => {
         console.log('WebSocket raw message received:', event.data)
         const msg = JSON.parse(event.data)
         console.log('WebSocket parsed message:', msg)
+        
+        // Verificar se a mensagem é válida e tem os campos esperados
+        if (!msg || !msg.type) {
+          console.error('Mensagem WebSocket sem tipo ou mal-formada:', msg);
+          return;
+        }
 
         if (msg.type === 'insta_config') {
           console.log('Insta360 config message received:', msg.data)
@@ -284,16 +323,52 @@ const RTMPStream360 = (props) => {
           })
         } else if (msg.type === 'insta_capture') {
           console.log('Insta360 capture message received:', msg.data);
+          console.log('Tipo de dados recebidos:', typeof msg.data);
+          console.log('Chaves do objeto msg.data:', Object.keys(msg.data));
+          console.log('Campo "image" existe?', 'image' in msg.data, msg.data.image !== undefined);
+          console.log('Campo "img" existe?', 'img' in msg.data, msg.data.img !== undefined);
+          console.log('Valores dos campos - image:', msg.data.image, '| img:', msg.data.img);
           
           // Verificar se é a primeira mensagem (confirmação do comando)
-          if (!msg.data.image) {
+          if (!msg.data.image && (!msg.data.img || msg.data.img === null)) {
             console.log('Confirmação de comando de captura recebida');
-            // Não resetamos isCapturing aqui, pois ainda estamos esperando a imagem
+            // Mostrar mensagem de espera
+            setResponseToast({
+              visible: true,
+              status: null,
+              message: 'Captura em andamento... Aguarde até 30 segundos.'
+            });
             return;
           }
           
           // Se chegou aqui, é a mensagem com a imagem
-          console.log('Imagem base64 recebida, tamanho:', msg.data.image.length);
+          // Verificar se a imagem está no campo 'image' ou 'img'
+          const imageData = msg.data.image || msg.data.img;
+          
+          // Verificar se a imagem não é nula antes de prosseguir
+          if (!imageData) {
+            console.error('Dados da imagem não encontrados ou nulos nas chaves:', Object.keys(msg.data));
+            console.error('Campos esperados "image" ou "img" estão vazios ou são null/undefined');
+            setIsCapturing(false);
+            setResponseToast({
+              visible: true,
+              status: 0,
+              message: 'Erro: dados da imagem não encontrados ou são nulos'
+            });
+            return;
+          }
+          
+          // Log detalhado da imagem recebida
+          console.log('Imagem base64 recebida de campo:', msg.data.image ? 'image' : 'img');
+          console.log('Imagem base64 recebida, tamanho:', imageData.length);
+          console.log('Tipo de dados da imagem:', typeof imageData);
+          
+          // Verificar se a string está truncada ou corrompida
+          const isValidEnd = imageData.endsWith('==') || imageData.endsWith('=');
+          console.log('A imagem termina com padding de base64 válido:', isValidEnd);
+          
+          console.log('Primeiros 100 caracteres da imagem:', imageData.substring(0, 100) + '...');
+          console.log('Últimos 100 caracteres da imagem:', imageData.substring(imageData.length - 100) + '...');
           
           // Limpar o timeout se existir
           if (timeoutRef.current) {
@@ -301,9 +376,33 @@ const RTMPStream360 = (props) => {
             timeoutRef.current = null;
           }
           
+          // Extrair a parte base64 se a imagem já vier com o prefixo data:image
+          let processedImageData = imageData;
+          if (typeof processedImageData === 'string' && processedImageData.startsWith('data:image')) {
+            console.log('Imagem já contém prefixo data:image, extraindo apenas a parte base64');
+            processedImageData = processedImageData.split(',')[1]; // Extrair apenas a parte base64
+          }
+          
+          // Verificar se a imagem não está corrompida
+          try {
+            const testDecode = atob(processedImageData.substring(0, 10));
+            console.log('Imagem base64 é válida');
+          } catch (e) {
+            console.error('Imagem recebida não é um base64 válido:', e);
+            setIsCapturing(false);
+            setResponseToast({
+              visible: true,
+              status: 0,
+              message: 'Imagem recebida em formato inválido'
+            });
+            return;
+          }
+          
           setIsCapturing(false);
-          setCapturedImage(msg.data.image);
+          setCapturedImage(processedImageData);
+          console.log('Estado capturedImage atualizado com a imagem');
           setShowImageModal(true);
+          console.log('Modal de imagem configurado para exibição');
           
           // Mostrar toast de sucesso
           setResponseToast({
@@ -333,54 +432,148 @@ const RTMPStream360 = (props) => {
     }
   }, [effectiveRoverId]);
 
-  // Adicionar após o useEffect do WebSocket
+  // Carregar Pannellum ao iniciar o componente
+  useEffect(() => {
+    loadPannellum()
+      .then(() => {
+        console.log('Pannellum carregado com sucesso');
+        setPannellumLoaded(true);
+      })
+      .catch(error => {
+        console.error('Erro ao carregar Pannellum:', error);
+      });
+  }, []);
+
+  // Atualizar o useEffect que monitora a modal e a imagem
   useEffect(() => {
     if (showImageModal && capturedImage) {
-      console.log('Inicializando player de imagem 360°');
+      console.log('Inicializando visualizador Pannellum para imagem 360°');
       
-      // Configurações do player para a imagem
-      const imageOptions = {
-        autoplay: true,
-        controls: true,
-        responsive: true,
-        fluid: true,
-        sources: [{
-          src: `data:image/jpeg;base64,${capturedImage}`,
-          type: 'image/jpeg'
-        }],
-        html5: {
-          vhs: {
-            overrideNative: true
+      let attempts = 0;
+      const maxAttempts = 30; // 30 * 100ms = 3 segundos de timeout
+      
+      const checkPannellumContainer = () => {
+        attempts++;
+        if (pannellumContainerRef.current) {
+          console.log(`Container Pannellum encontrado após ${attempts} tentativas`);
+          
+          // Tentar carregar a biblioteca se ainda não estiver carregada
+          if (!pannellumLoaded) {
+            loadPannellum()
+              .then(() => {
+                console.log('Pannellum carregado com sucesso');
+                setPannellumLoaded(true);
+                
+                // Obter o src da imagem
+                let imageSrc;
+                if (typeof capturedImage === 'string') {
+                  if (capturedImage.startsWith('data:')) {
+                    imageSrc = capturedImage;
+                  } else {
+                    // Detectar tipo de mídia
+                    let mimeType = 'image/jpeg'; // Padrão
+                    if (capturedImage.startsWith('/9j/')) {
+                      console.log('Detectado formato JPEG pelo cabeçalho base64');
+                      mimeType = 'image/jpeg';
+                    } else if (capturedImage.startsWith('iVBORw0K')) {
+                      console.log('Detectado formato PNG pelo cabeçalho base64');
+                      mimeType = 'image/png';
+                    }
+                    imageSrc = `data:${mimeType};base64,${capturedImage}`;
+                  }
+                  initializePannellumViewer(imageSrc);
+                } else {
+                  console.error('capturedImage não é uma string:', typeof capturedImage);
+                  setResponseToast({
+                    visible: true,
+                    status: 0,
+                    message: 'Formato de imagem inválido'
+                  });
+                }
+              })
+              .catch(error => {
+                console.error('Erro ao carregar Pannellum:', error);
+                setResponseToast({
+                  visible: true,
+                  status: 0,
+                  message: 'Erro ao carregar visualizador panorâmico'
+                });
+              });
+          } else {
+            // Se já estiver carregado, inicializar diretamente
+            let imageSrc;
+            if (typeof capturedImage === 'string') {
+              // Detectar tipo de mídia
+              let mimeType = 'image/jpeg'; // Padrão
+              if (capturedImage.startsWith('/9j/')) {
+                console.log('Detectado formato JPEG pelo cabeçalho base64');
+                mimeType = 'image/jpeg';
+              } else if (capturedImage.startsWith('iVBORw0K')) {
+                console.log('Detectado formato PNG pelo cabeçalho base64');
+                mimeType = 'image/png';
+              }
+              
+              if (capturedImage.startsWith('data:')) {
+                imageSrc = capturedImage;
+              } else {
+                imageSrc = `data:${mimeType};base64,${capturedImage}`;
+              }
+              initializePannellumViewer(imageSrc);
+            } else {
+              console.error('capturedImage não é uma string:', typeof capturedImage);
+              setResponseToast({
+                visible: true,
+                status: 0,
+                message: 'Formato de imagem inválido'
+              });
+            }
           }
+        } else if (attempts < maxAttempts) {
+          console.log(`Container Pannellum ainda não disponível, tentativa ${attempts}/${maxAttempts}`);
+          setTimeout(checkPannellumContainer, 100);
+        } else {
+          console.error('Timeout: Container Pannellum não encontrado após várias tentativas');
+          setResponseToast({
+            visible: true,
+            status: 0,
+            message: 'Erro ao inicializar visualizador panorâmico'
+          });
         }
       };
-
-      // Inicializar o player de imagem
-      let player = videojs(imagePlayerRef.current, imageOptions, function onPlayerReady() {
-        console.log('Player de imagem pronto');
-        
-        // Configurar VR para a imagem
-        this.mediainfo = this.mediainfo || {};
-        this.mediainfo.projection = 'equirectangular';
-        
-        this.vr({
-          projection: 'equirectangular',
-          debug: false,
-          forceCardboard: false,
-          defaultFov: 90
-        });
-      });
-
-      imagePlayerInstanceRef.current = player;
-
-      return () => {
-        if (imagePlayerInstanceRef.current) {
-          imagePlayerInstanceRef.current.dispose();
-          imagePlayerInstanceRef.current = null;
+      
+      checkPannellumContainer();
+    } else if (!showImageModal) {
+      // Limpar sinalizador quando modal é fechado
+      modalRenderedRef.current = false;
+      
+      // Destruir o visualizador Pannellum se existir
+      if (pannellumViewerRef.current) {
+        try {
+          // Verificar se tem método destroy
+          if (typeof pannellumViewerRef.current.destroy === 'function') {
+            pannellumViewerRef.current.destroy();
+          }
+          pannellumViewerRef.current = null;
+        } catch (e) {
+          console.error('Erro ao destruir visualizador Pannellum:', e);
         }
-      };
+      }
     }
-  }, [showImageModal, capturedImage]);
+    
+    return () => {
+      // Limpar recursos do Pannellum
+      if (pannellumViewerRef.current) {
+        try {
+          if (typeof pannellumViewerRef.current.destroy === 'function') {
+            pannellumViewerRef.current.destroy();
+          }
+          pannellumViewerRef.current = null;
+        } catch (e) {
+          console.error('Erro ao destruir visualizador Pannellum no cleanup:', e);
+        }
+      }
+    };
+  }, [showImageModal, capturedImage, pannellumLoaded]);
 
   // Funções para configuração da Insta360
   const handleInputChange = (e) => {
@@ -580,6 +773,9 @@ const RTMPStream360 = (props) => {
       console.log('Iniciando captura de imagem...');
       setIsCapturing(true);
       
+      // Limpar qualquer imagem anterior
+      setCapturedImage(null);
+      
       // Mostrar toast de "aguardando"
       setResponseToast({
         visible: true,
@@ -606,20 +802,43 @@ const RTMPStream360 = (props) => {
           message: 'Erro ao capturar imagem'
         });
       } else {
-        console.log('Comando de captura enviado com sucesso, aguardando imagem...');
+        // Mostrar dados da resposta da API para debug
+        try {
+          const responseData = await response.json();
+          console.log('Resposta da API de captura:', responseData);
+          
+          // Verificar se a resposta já contém uma imagem (comportamento síncrono)
+          if (responseData && responseData.image) {
+            console.log('Imagem recebida diretamente da resposta API');
+            setIsCapturing(false);
+            openImageModal(responseData.image);
+            
+            setResponseToast({
+              visible: true,
+              status: 1,
+              message: 'Imagem capturada com sucesso!'
+            });
+            return;
+          }
+        } catch (e) {
+          console.log('Resposta sem corpo JSON');
+        }
         
-        // Configurar timeout de 15 segundos
+        console.log('Comando de captura enviado com sucesso, aguardando imagem (pode demorar até 30 segundos)...');
+        console.log('IMPORTANTE: Verificar se o backend está enviando mensagem com campo "image" (não apenas "img")');
+        
+        // Configurar timeout mais longo (30 segundos)
         timeoutRef.current = setTimeout(() => {
           if (isCapturing) {
-            console.log('Timeout atingido - imagem não recebida');
+            console.log('Timeout atingido - imagem não recebida após 30 segundos');
             setIsCapturing(false);
             setResponseToast({
               visible: true,
               status: 0,
-              message: 'Tempo limite excedido - Imagem não recebida'
+              message: 'Tempo limite excedido (30s) - Imagem não recebida'
             });
           }
-        }, 15000);
+        }, 30000); // Aumentado para 30 segundos
       }
     } catch (error) {
       console.error('Erro ao capturar imagem:', error);
@@ -637,6 +856,110 @@ const RTMPStream360 = (props) => {
     if (imagePlayerInstanceRef.current) {
       imagePlayerInstanceRef.current.dispose();
       imagePlayerInstanceRef.current = null;
+    }
+    modalRenderedRef.current = false;
+  };
+
+  // Função para exibir o modal e garantir a inicialização do player
+  const openImageModal = (image) => {
+    setCapturedImage(image);
+    setShowImageModal(true);
+    setUsePannellum(true);
+    
+    // Resetar o sinalizador para forçar nova inicialização do player
+    modalRenderedRef.current = false;
+    
+    console.log('Modal de imagem aberto em modo 360° com Pannellum, aguardando renderização DOM');
+  };
+
+  // Função para salvar a imagem
+  const handleSaveImage = () => {
+    try {
+      if (!capturedImage) {
+        console.error('Não há imagem para salvar');
+        setResponseToast({
+          visible: true,
+          status: 0,
+          message: 'Não há imagem para salvar'
+        });
+        return;
+      }
+
+      let imageDataUrl;
+      if (capturedImage.startsWith('data:')) {
+        imageDataUrl = capturedImage;
+      } else {
+        imageDataUrl = `data:image/jpeg;base64,${capturedImage}`;
+      }
+
+      // Criar link para download
+      const link = document.createElement('a');
+      link.href = imageDataUrl;
+      link.download = `insta360_capture_${new Date().toISOString()}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setResponseToast({
+        visible: true,
+        status: 1,
+        message: 'Imagem salva com sucesso!'
+      });
+    } catch (error) {
+      console.error('Erro ao salvar imagem:', error);
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: `Erro ao salvar imagem: ${error.message}`
+      });
+    }
+  };
+
+  // Adicionar função para inicializar o Pannellum
+  const initializePannellumViewer = (imageSrc) => {
+    if (!pannellumContainerRef.current || !window.pannellum) {
+      console.error('Container Pannellum ou biblioteca não disponível');
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: 'Erro ao inicializar visualizador panorâmico'
+      });
+      return;
+    }
+    
+    try {
+      // Limpar qualquer visualizador existente
+      if (pannellumViewerRef.current) {
+        pannellumViewerRef.current = null;
+      }
+      
+      // Limpar o conteúdo do container
+      pannellumContainerRef.current.innerHTML = '';
+      
+      console.log('Inicializando Pannellum com imagem:', imageSrc.substring(0, 50) + '...');
+      
+      pannellumViewerRef.current = window.pannellum.viewer(
+        pannellumContainerRef.current,
+        {
+          type: 'equirectangular',
+          panorama: imageSrc,
+          autoLoad: true,
+          compass: true,
+          showFullscreenCtrl: true,
+          showZoomCtrl: true,
+          mouseZoom: true,
+          keyboardZoom: true
+        }
+      );
+      
+      console.log('Pannellum inicializado com sucesso');
+    } catch (error) {
+      console.error('Erro ao inicializar Pannellum:', error);
+      setResponseToast({
+        visible: true,
+        status: 0,
+        message: 'Erro ao inicializar visualizador panorâmico'
+      });
     }
   };
 
@@ -832,31 +1155,25 @@ const RTMPStream360 = (props) => {
         visible={showImageModal} 
         onClose={handleCloseImageModal}
         size="xl"
+        onShow={() => console.log('Modal de imagem aberto, capturedImage existe:', !!capturedImage)}
       >
         <CModalTitle>Imagem 360° Capturada</CModalTitle>
         <CModalBody>
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            height: '0',
-            paddingBottom: '56.25%',
-            backgroundColor: '#000',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}>
-            <div style={{ width: '100%', height: '100%', position: 'absolute' }}>
-              <video
-                ref={imagePlayerRef}
-                className="video-js vjs-default-skin vjs-big-play-centered"
-                crossOrigin="anonymous"
-                controls
-                playsInline
-                style={{ width: '100%', height: '100%' }}
-              />
-            </div>
-          </div>
+          {/* Container para Pannellum - sempre visível sem condição */}
+          <div
+            ref={pannellumContainerRef}
+            style={{
+              width: '100%',
+              height: '500px',
+              backgroundColor: '#000',
+              borderRadius: '8px'
+            }}
+          ></div>
         </CModalBody>
         <CModalFooter>
+          <CButton color="primary" onClick={handleSaveImage} className="me-2">
+            Salvar Imagem
+          </CButton>
           <CButton color="secondary" onClick={handleCloseImageModal}>
             Fechar
           </CButton>

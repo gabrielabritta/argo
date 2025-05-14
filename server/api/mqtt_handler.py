@@ -161,14 +161,28 @@ class MQTTHandler:
                         logger.info(f"[MQTT] Resposta insta/capture recebida")
                         status_value = data.get('status')
                         image_base64 = data.get('img')
+                        
+                        # Verificar se há imagem no campo 'image' se 'img' estiver vazio
+                        if not image_base64 and 'image' in data:
+                            image_base64 = data.get('image')
+                            logger.info(f"[MQTT] Usando campo 'image' em vez de 'img'")
+                            # Atualizar o campo 'img' com o valor de 'image' para manter compatibilidade
+                            data['img'] = image_base64
+                        
+                        # Salvar imagem para depuração
+                        debug_file = self.save_debug_image(rover_id, image_base64)
+                        if debug_file:
+                            logger.info(f"[MQTT] Amostra da imagem salva em {debug_file}")
+                        
+                        # Adicionar o campo 'image' também para garantir compatibilidade
+                        if image_base64 and 'image' not in data:
+                            data['image'] = image_base64
+                            logger.info(f"[MQTT] Adicionado campo 'image' para compatibilidade")
 
                         # Enviar via WebSocket
                         channel_message = {
                             'type': 'insta_capture',
-                            'data': {
-                                'status': status_value,
-                                'img': image_base64
-                            }
+                            'data': data
                         }
 
                         async_to_sync(self.channel_layer.group_send)(
@@ -216,6 +230,58 @@ class MQTTHandler:
             logger.info(f"[handle_image_message] Imagem enviada ao WebSocket do rover {rover_id}")
         except Exception as e:
             logger.error(f"[handle_image_message] Erro ao tratar mensagem de imagem: {e}")
+
+    def save_debug_image(self, rover_id, image_data, image_type="insta360"):
+        """
+        Salva uma pequena amostra da imagem em um arquivo de texto para depuração
+        """
+        try:
+            import os
+            from datetime import datetime
+            
+            # Criar diretório de depuração se não existir
+            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tmp', 'debug')
+            os.makedirs(debug_dir, exist_ok=True)
+            
+            # Nome do arquivo com timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.join(debug_dir, f"{image_type}_image_{rover_id}_{timestamp}.txt")
+            
+            # Salvar informações no arquivo
+            with open(filename, 'w') as f:
+                # Escrever cabeçalho
+                f.write(f"IMAGEM DEBUG - {image_type.upper()} - ROVER: {rover_id}\n")
+                f.write(f"Timestamp: {timestamp}\n")
+                f.write(f"Tipo: {type(image_data)}\n")
+                f.write(f"Tamanho: {len(image_data) if image_data else 0}\n\n")
+                
+                # Escrever amostra da imagem
+                if image_data:
+                    # Apenas os primeiros e últimos 100 caracteres para não sobrecarregar o arquivo
+                    f.write("PRIMEIROS 100 CARACTERES:\n")
+                    f.write(str(image_data[:100]) + "...\n\n")
+                    
+                    f.write("ÚLTIMOS 100 CARACTERES:\n")
+                    f.write("..." + str(image_data[-100:]) + "\n\n")
+                    
+                    # Verificar se parece ser base64 válido
+                    is_valid_base64 = image_data.endswith('==') or image_data.endswith('=')
+                    f.write(f"Parece base64 válido: {is_valid_base64}\n")
+                    
+                    # Para imagens maiores, salvar uma versão completa em arquivo separado
+                    if len(image_data) > 1000:
+                        full_filename = os.path.join(debug_dir, f"{image_type}_image_{rover_id}_{timestamp}_full.txt")
+                        with open(full_filename, 'w') as full_f:
+                            full_f.write(image_data)
+                        f.write(f"Imagem completa salva em: {full_filename}\n")
+                else:
+                    f.write("ALERTA: Imagem está vazia ou nula\n")
+            
+            logger.info(f"[DEBUG] Informações da imagem salvas em {filename}")
+            return filename
+        except Exception as e:
+            logger.error(f"[DEBUG] Erro ao salvar imagem para depuração: {e}")
+            return None
 
     def handle_boxes_message(self, rover_id, payload):
         """
@@ -428,6 +494,23 @@ class MQTTHandler:
                         logger.info(f"[MQTT] Status convertido para inteiro: {data['status']}")
                     except (ValueError, TypeError):
                         logger.warning(f"[MQTT] Não foi possível converter status para inteiro: {data['status']}")
+            
+            # Verificar a presença da imagem e salvar para depuração
+            image_data = data.get('img') or data.get('image')
+            if image_data:
+                logger.info(f"[MQTT] Imagem presente no evento insta_capture, tamanho: {len(image_data)}")
+                # Salvar para depuração somente se for o evento com a imagem
+                debug_file = self.save_debug_image(self.rover_id, image_data, "insta360_ws")
+                if debug_file:
+                    logger.info(f"[MQTT] Amostra da imagem do WebSocket salva em {debug_file}")
+                
+                # Garantir que ambos os campos image e img existam
+                if 'img' in data and 'image' not in data:
+                    data['image'] = data['img']
+                elif 'image' in data and 'img' not in data:
+                    data['img'] = data['image']
+            else:
+                logger.warning(f"[MQTT] Evento insta_capture sem imagem: {data}")
 
             await self.channel_layer.group_send(
                 f"rover_{self.rover_id}",
