@@ -1,6 +1,0 @@
-IMAGEM DEBUG - INSTA360 - ROVER: Rover-Argo-N-0
-Timestamp: 20250515_174232
-Tipo: <class 'NoneType'>
-Tamanho: 0
-
-ALERTA: Imagem está vazia ou nula
