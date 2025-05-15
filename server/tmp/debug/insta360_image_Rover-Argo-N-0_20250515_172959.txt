@@ -1,0 +1,13 @@
+IMAGEM DEBUG - INSTA360 - ROVER: Rover-Argo-N-0
+Timestamp: 20250515_172959
+Tipo: <class 'str'>
+Tamanho: 9383636
+
+PRIMEIROS 100 CARACTERES:
+/9j/4AAQSkZJRgABAQAAAQABAAD/4QBkRXhpZgAASUkqAAgAAAADAA8BAgAJAAAAMgAAABABAgAMAAAAPAAAADIBAgAUAAAASAAA...
+
+ÚLTIMOS 100 CARACTERES:
+...5n/Cjll2f9f8P+fZhb+6vw8v8393mT+RD/lj/SjyofT+f+FQfvv7kX5n/Cj99/ci/M/4Ucsuz/r/AIf8+zC391Lbt5f8H7vM/9k=
+
+Parece base64 válido: True
+Imagem completa salva em: /app/tmp/debug/insta360_image_Rover-Argo-N-0_20250515_172959_full.txt

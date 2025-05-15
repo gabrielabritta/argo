@@ -252,13 +252,11 @@ const RTMPStream360 = (props) => {
             console.log('Status convertido de string para número:', status);
           }
 
-          // Se o status for null, considerar como aguardando (não mostra erro)
-          if (status === null) {
-            console.log('Status null recebido, aguardando outra mensagem de confirmação');
+          // Se o status for null ou negativo, ignorar
+          if (status === null || status < 0) {
+            console.log('Status null ou negativo recebido, ignorando:', status);
             return;
           }
-
-          console.log('Status final para toast:', status, typeof status);
 
           // Definir o toast com o status correto
           setResponseToast({
@@ -269,18 +267,18 @@ const RTMPStream360 = (props) => {
               : 'Erro ao aplicar configuração.'
           });
 
-          console.log('Toast configurado:', {
-            visible: true,
-            status: status,
-            message: status === 1 ? 'Configuração aplicada com sucesso!' : 'Erro ao aplicar configuração.'
-          });
         } else if (msg.type === 'insta_connect') {
           console.log('Insta360 connect message received:', msg.data);
           
           // Verificar se temos um status válido
-          if (msg.data.status === null) {
-            console.log('Status null recebido em insta_connect, aguardando confirmação');
-            // Não marcar como recebido para continuar aguardando
+          let status = msg.data.status;
+          if (typeof status === 'string') {
+            status = parseInt(status, 10);
+          }
+          
+          // Se o status for null ou negativo, ignorar
+          if (status === null || status < 0) {
+            console.log('Status null ou negativo recebido em insta_connect, ignorando:', status);
             return;
           }
           
@@ -288,45 +286,29 @@ const RTMPStream360 = (props) => {
           responseReceivedRef.current = true;
           clearTimeout(timeoutRef.current);
           
-          const status = msg.data.status;
+          // Atualizar estado de conexão apenas para status positivos
+          if (status === 1 || status === 0) {
+            setIsInstaConnected(status === 1);
 
-          // Atualizar estado de conexão
-          setIsInstaConnected(status === 1);
-
-          // Mostrar mensagem apropriada
-          let message = '';
-          switch(status) {
-            case 1:
-              message = 'Conectado com sucesso!';
-              break;
-            case 0:
-              message = 'Desconectado com sucesso!';
-              break;
-            case -1:
-              message = 'Rede não encontrada';
-              break;
-            case -2:
-              message = 'Credenciais não configuradas';
-              break;
-            case -3:
-              message = 'Erro de conexão com a Insta';
-              break;
-            default:
-              message = 'Erro desconhecido';
+            setResponseToast({
+              visible: true,
+              status: status === 1 ? 1 : 0,
+              message: status === 1 ? 'Conectado com sucesso!' : 'Desconectado com sucesso!'
+            });
           }
 
-          setResponseToast({
-            visible: true,
-            status: status === 1 ? 1 : 0,
-            message: message
-          });
         } else if (msg.type === 'insta_live') {
           console.log('Insta360 live message received:', msg.data);
           
           // Verificar se temos um status válido
-          if (msg.data.status === null) {
-            console.log('Status null recebido em insta_live, aguardando confirmação');
-            // Não marcar como recebido para continuar aguardando
+          let status = msg.data.status;
+          if (typeof status === 'string') {
+            status = parseInt(status, 10);
+          }
+          
+          // Se o status for null ou negativo, ignorar
+          if (status === null || status < 0) {
+            console.log('Status null ou negativo recebido em insta_live, ignorando:', status);
             return;
           }
           
@@ -334,45 +316,23 @@ const RTMPStream360 = (props) => {
           responseReceivedRef.current = true;
           clearTimeout(timeoutRef.current);
           
-          const status = msg.data.status;
+          // Atualizar estado de live apenas para status positivos
+          if (status === 1 || status === 0) {
+            setIsLiveActive(status === 1);
 
-          // Atualizar estado de live
-          setIsLiveActive(status === 1);
-
-          // Mostrar mensagem apropriada
-          let message = '';
-          switch(status) {
-            case 1:
-              message = 'Live iniciada com sucesso!';
-              break;
-            case 0:
-              message = 'Live parada com sucesso!';
-              break;
-            case -1:
-              message = 'Erro ao iniciar/parar live';
-              break;
-            default:
-              message = 'Erro desconhecido';
+            setResponseToast({
+              visible: true,
+              status: status === 1 ? 1 : 0,
+              message: status === 1 ? 'Live iniciada com sucesso!' : 'Live parada com sucesso!'
+            });
           }
 
-          setResponseToast({
-            visible: true,
-            status: status === 1 ? 1 : 0,
-            message: message
-          });
         } else if (msg.type === 'insta_capture') {
           console.log('Insta360 capture message received:', msg.data);
           
           // Verificar se é a primeira mensagem (confirmação do comando)
           if (!msg.data.image && (!msg.data.img || msg.data.img === null)) {
             console.log('Confirmação de comando de captura recebida');
-            // Não marcar como recebido - aguardando a imagem
-            // Mostrar mensagem de espera
-            setResponseToast({
-              visible: true,
-              status: null,
-              message: 'Captura em andamento... Aguarde até 30 segundos.'
-            });
             return;
           }
           
@@ -393,11 +353,6 @@ const RTMPStream360 = (props) => {
             console.error('Dados da imagem não encontrados ou nulos nas chaves:', Object.keys(msg.data));
             console.error('Campos esperados "image" ou "img" estão vazios ou são null/undefined');
             setIsCapturing(false);
-            setResponseToast({
-              visible: true,
-              status: 0,
-              message: 'Erro: dados da imagem não encontrados ou são nulos'
-            });
             return;
           }
           
@@ -433,11 +388,6 @@ const RTMPStream360 = (props) => {
           } catch (e) {
             console.error('Imagem recebida não é um base64 válido:', e);
             setIsCapturing(false);
-            setResponseToast({
-              visible: true,
-              status: 0,
-              message: 'Imagem recebida em formato inválido'
-            });
             return;
           }
           
